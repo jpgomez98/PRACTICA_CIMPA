@@ -292,9 +292,10 @@ train_gen <- generator(
 
 model <- keras_model_sequential() %>%
   layer_flatten(input_shape = c(lookback / step, dim(turri)[-1])) %>%
-  layer_dense(units = 128, activation = "relu") %>%
-  layer_dense(units = 64, activation = "relu") %>%
-  layer_dense(units = 1)
+  layer_dense(units = 100, activation = "relu") %>% # 100 neuronas
+  layer_dense(units = 32, activation = "relu") %>% # luego 32
+  layer_dense(units = 1) # luego devuelve un punto
+
 
 summary(model)
 
@@ -354,3 +355,20 @@ Ahora imprimimos los datos predichos de la flatten NN
   p
 ```
 
+```{r GeneratingArray}
+T_data <- data[1:257, 2]
+
+x1 <- data.frame()
+for (i in 1:10000) {
+  x1 <- rbind(x1, t(rev(T_data[i:(i + 240)])))
+  if(i%%100 == 0){print(i)}
+}
+
+x1 <- x1[,order(ncol(x1):1)]
+
+x <- as.matrix(x1[,-241])
+y <- as.matrix(x1[, 241])
+
+dim(x) <- c(10000, 240, 1)
+
+```
