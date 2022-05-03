@@ -1,0 +1,356 @@
+---
+title: "JP_Primer_Analisis"
+author: "Jose Pablo Gómez Mata"
+date: "4/26/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Preparacion del entrono
+```{r}
+library(tensorflow)
+library(keras)
+library(tidyverse)
+library(caret) 
+library(ggplot2)
+library(ggpubr)
+library(grid)
+# Por si hay prolemas con keras\tensorflow:
+
+# devtools::install_github("rstudio/keras")
+# library(keras)
+# install_keras(method = "conda")
+# install_keras(tensorflow = "gpu")
+# tensorflow::install_tensorflow()
+```
+
+# Carga de datos
+```{r}
+load('bases_analisis.RData')
+base <- bases_ent %>% reduce(rbind)
+
+head(base)
+colnames(base)
+```
+
+*Year* = fecha de la observacion
+
+*Month* = mes de la observacion 
+
+*Canton* = canton 
+
+*Cases* = casos
+
+*Nino12SSTA* = Anomalía semanal de la temperatura de la superficie del mar ENOS
+
+*Nino3SSTA* = Anomalía semanal de la temperatura de la superficie del mar ENOS
+
+*Nino4SSTA* = Anomalía semanal de la temperatura de la superficie del mar ENOS
+
+*Nino34SSTA* = Anomalía semanal de la temperatura de la superficie del mar ENOS
+
+*TNA* = Índice del Atlántico Norte Tropical. Índice de anomalía de la superficie del mar temperatura sobre el Océano Atlántico Norte tropical oriental
+
+*CCanton* = Código Canton
+
+*Poblacion* = poblacion de ese canton
+
+*PoblacionCR* = poblacion del pais
+
+*CasesCR* = casos totales del pais
+
+*constRR* = riesgo relativo 
+
+*EVI*  
+
+*NDVI*  
+
+*NDWI* = normalized difference water index 
+
+*LSD* = temperatura de la superficie (dia)
+
+*LSN*  = temperatura de la superficie (noche)
+
+*RR*  = riesgo relativo
+
+*OFF* = offset
+
+*Precip_t* = precipitacion del mes t
+
+*Nino12SSTAl1* = variable con rezago
+
+*Nino3SSTAl1* = variable con rezago
+
+*Nino34SSTAl1* = variable con rezago
+
+*Nino4SSTAl1* = variable con rezago
+
+*EVIl1* = variable con rezago
+
+*NDVIl1* = variable con rezago
+
+*NDWIl1* = variable con rezago
+
+*LSDl1* = variable con rezago
+
+*LSNl1* = variable con rezago
+
+*TNAl1* = variable con rezago
+
+*Precipl1* = precipitacion con rezago
+
+# construir una base con un canton (Turrialba)
+```{r exploracion de datos}
+base_prueba = filter(base, Canton == "Turrialba")
+
+gg_RR <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=RR)) + 
+  geom_line() + xlab("observaciones") + ggtitle("Variable respuesta")# no tenemos valores negativos lo cual no va a generar problemas en nuestro modelo, por ende no hay que aplicarle ningun tipo de transformacion o arreglo
+
+
+gg_NDWI <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=NDWI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable NDWI")
+
+gg_TNA <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=TNA))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable TNA")
+
+gg_EVI <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=EVI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable EVI")
+
+gg_NDVI <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=NDVI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable NDVI")
+
+gg_LSD <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=LSD))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable temp. de la superficie (DIA)")
+
+gg_LSN <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=LSN))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable temp. de la superficie (NOCHE)")
+
+gg_Nino34SSTA <- ggplot(base_prueba, aes(x=1:nrow(base_prueba), y=Nino34SSTA))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable Nino34SSTA")
+# creo la "hoja en blanco"
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
+
+# una funcion que simplifica el acomodo de los graficos
+define_region <- function(row, col){
+  viewport(layout.pos.row = row, layout.pos.col = col)
+}
+
+print(gg_RR, vp = define_region(row = 1, col = 1:3))
+print(gg_Nino34SSTA, vp = define_region(row = 2, col = 1:3))
+print(gg_NDWI, vp = define_region(row = 3, col = 1))
+print(gg_TNA, vp = define_region(row = 3, col = 2))
+print(gg_EVI, vp = define_region(row = 3, col = 3))
+print(gg_NDVI, vp = define_region(row = 4, col = 1))
+print(gg_LSD, vp = define_region(row = 4, col = 2))
+print(gg_LSN, vp = define_region(row = 4, col = 3))
+
+
+```
+
+# base estandarizada
+```{r}
+turri <- data.matrix(base_prueba[,c(8,9,15,16,17,18,19)])
+
+mean <- apply(turri, 2, mean) # se sacan las medias de todas las variables numericas
+std <- apply(turri, 2, sd) # se saca la desviacion estandar para todas las variables numericas
+turri <- scale(turri, center = mean, scale = std) # se centran las 14 variables restantes
+
+# Se crea la funcion para normalizar, esta funcion transforma el valor minimo a 0 y el valor maximo a 1
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+max <- apply(turri,2,max) # se saca el maximo de cada una de las 14 variables centradas
+min <- apply(turri,2,min) # Se saca el minimo de cada una de las 14 variables centradas
+
+turri <- apply(turri, 2, normalize) # se normaliza cada una de las 14 variables, para cada una el minimo sera 0 y el maximo 1
+
+```
+
+# grafico de base estandarizada
+```{r}
+
+gg_NDWI <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=NDWI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable NDWI")
+
+gg_TNA <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=TNA))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable TNA")
+
+gg_EVI <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=EVI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable EVI")
+
+gg_NDVI <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=NDVI))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable NDVI")
+
+gg_LSD <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=LSD))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable temp. de la superficie (DIA)")
+
+gg_LSN <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=LSN))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable temp. de la superficie (NOCHE)")
+
+gg_Nino34SSTA <- ggplot(data.frame(turri), aes(x=1:nrow(turri), y=Nino34SSTA))+ 
+  geom_line() + xlab("observaciones") + ggtitle("Variable Nino34SSTA")
+
+# creo la "hoja en blanco"
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 3)))
+
+# una funcion que simplifica el acomodo de los graficos
+define_region <- function(row, col){
+  viewport(layout.pos.row = row, layout.pos.col = col)
+}
+
+print(gg_Nino34SSTA, vp = define_region(row = 1, col = 1:3))
+print(gg_NDWI, vp = define_region(row = 2, col = 1))
+print(gg_TNA, vp = define_region(row = 2, col = 2))
+print(gg_EVI, vp = define_region(row = 2, col = 3))
+print(gg_NDVI, vp = define_region(row = 3, col = 1))
+print(gg_LSD, vp = define_region(row = 3, col = 2))
+print(gg_LSN, vp = define_region(row = 3, col = 3))
+```
+
+
+# funcion que alimenta al modelo
+
+```{r Generators}
+# esta funcion lo que hace es alimentar el modelo paulatinamente y no todo de un solo golpe
+generator <- function(data,
+                      lookback,
+                      delay,
+                      min_index,
+                      max_index,
+                      shuffle = FALSE,
+                      batch_size = 128,
+                      step = 6) {
+  if (is.null(max_index))
+    max_index <- nrow(data) - delay - 1
+  i <- min_index + lookback
+  function() {
+    if (shuffle) {
+      rows <-
+        sample(c((min_index + lookback):max_index), size = batch_size)
+    } else {
+      if (i + batch_size >= max_index)
+        i <<- min_index + lookback
+      rows <- c(i:min(i + batch_size - 1, max_index))
+      i <<- i + length(rows)
+    }
+    samples <- array(0, dim = c(length(rows),
+                                lookback / step,
+                                dim(data)[[-1]]))
+    targets <- array(0, dim = c(length(rows)))
+    
+    for (j in 1:length(rows)) {
+      indices <- seq(rows[[j]] - lookback, rows[[j]] - 1,
+                     length.out = dim(samples)[[2]])
+      samples[j, , ] <- data[indices, ]
+      targets[[j]] <- data[rows[[j]] + delay, 2]
+    }
+    list(samples, targets)
+  }
+}
+
+```
+
+# Flatten NN
+
+```{r}
+
+# en este caso tengo una base con 8 variables pero no cuento la respuesta, por lo que me quedan 7 variables, en este caso flatten NN funciona asi:
+
+# variable # observacion.............18
+    # 1   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 2   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 3   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 4   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 5   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 6   1,2,3,4,5,6,7,8,9,10,.....,18
+    # 7   1,2,3,4,5,6,7,8,9,10,.....,18
+    
+# esta matriz 7 X 18 serviria para predecir una sola salida.
+
+
+
+lookback <- 18 # utilizamos una muestra de 18 meses para predecir 1 mes 
+step <- 1 # esto es para dividir el lookback
+delay <- 1
+batch_size <- 32
+
+train_gen <- generator(
+  turri,
+  lookback = lookback,
+  delay = delay,
+  min_index = 1, # se entrena del individuo 1
+  max_index = 203, # hasta el individuo 203 
+  shuffle = FALSE,
+  step = step,
+  batch_size = batch_size)
+
+ train_gen_data <- train_gen()
+
+model <- keras_model_sequential() %>%
+  layer_flatten(input_shape = c(lookback / step, dim(turri)[-1])) %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1)
+
+summary(model)
+
+model %>% compile(optimizer = optimizer_rmsprop(),
+                  loss = "mae")
+
+history <- model %>% fit(
+  train_gen_data[[1]],train_gen_data[[2]],
+  batch_size = 32,
+  epochs = 15, # le puse 15 epocas para probar
+  use_multiprocessing = T
+)
+
+
+```
+
+
+Ahora imprimimos los datos predichos de la flatten NN
+
+```{r}
+  batch_size_plot <- 430 # seria a partir de las 227 observaciones + 203 que tomamos para observar
+  lookback_plot <- lookback
+  step_plot <- 1 
+  
+  pred_gen <- generator(
+    data,
+    lookback = lookback_plot,
+    delay = 0,
+    min_index = 203,
+    max_index = 406,
+    shuffle = FALSE,
+    step = step_plot,
+    batch_size = batch_size_plot
+  )
+  
+  pred_gen_data <- pred_gen()
+  
+  V1 = seq(1, length(pred_gen_data[[2]]))
+  
+  plot_data <-
+    as.data.frame(cbind(V1, pred_gen_data[[2]]))
+  
+  inputdata <- pred_gen_data[[1]]
+  dim(inputdata) <- c(batch_size_plot, lookback, 29) # no me esta dando :(
+  
+  pred_out <- model %>%
+    predict(inputdata) 
+  
+  plot_data <-
+    cbind(plot_data, pred_out)
+  
+  p <-
+    ggplot(plot_data, aes(x = V1, y = V2)) + geom_point(colour = "blue", size = 0.1,alpha=0.4)
+  p <-
+    p + geom_point(aes(x = V1, y = pred_out), colour = "red", size = 0.1 ,alpha=0.4)
+  
+  p
+```
+
