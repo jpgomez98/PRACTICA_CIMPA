@@ -512,7 +512,10 @@ mod %>% layer_dense(units = 1, activation = 'relu')
 summary(mod)
 
 # esto es opcional y le indicara al modelo ademas de la perdida "loss" que debe hacer en caso de perder presicion
+
 mod %>% compile(loss = 'mae',optimizer = optimizer_rmsprop(),metrics = c('accuracy'))
+
+# mod %>% compile(loss = 'mean_squared_error', optimizer = 'adam',metrics='mse')
 ```
 
 # entrenar el modelo
