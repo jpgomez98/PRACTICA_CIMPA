@@ -151,7 +151,7 @@ print(gg_LSN, vp = define_region(row = 4, col = 3))
 
 # base estandarizada
 ```{r}
-turri <- data.matrix(base_prueba[,c(8,9,15,16,17,18,19)])
+turri <- data.matrix(base_prueba[,c(20,8,9,15,16,17,18,19)])
 
 mean <- apply(turri, 2, mean) # se sacan las medias de todas las variables numericas
 std <- apply(turri, 2, sd) # se saca la desviacion estandar para todas las variables numericas
@@ -372,3 +372,168 @@ y <- as.matrix(x1[, 241])
 dim(x) <- c(10000, 240, 1)
 
 ```
+
+
+# 2 INTENTO NN
+
+```{r}
+# turri
+library(neuralnet)
+turri <- data.frame(turri)
+head(turri)
+turri_train = turri[1:180,]
+
+mod_nn = neuralnet(RR~Nino34SSTA+TNA+EVI+NDVI+NDWI+LSD+LSN, hidden = 8, act.fct = 'tanh', linear.output = F,data = turri_train)
+```
+
+
+# plot
+```{r}
+plot(mod_nn)
+```
+
+# ahora tomo una parte de la base como prueba
+no utilizo la vriable respuesta (RR)
+```{r}
+turri_test <- turri[181:227,-1] # elimino la variable respuesta
+```
+
+# prediccion
+
+```{r}
+pred = compute(mod_nn,turri_test)
+
+pred$net.result
+
+cbind(pred$net.result,turri[181:227,1])
+```
+
+por lo visto solo hay dos tipos de funcion de activacion para predicciones binarias
+
+# INTENTO 3 RNN
+
+```{r}
+library(tensorflow)
+library(keras)  # Este paquete es para deep learning
+library(tidyverse) # Funciones generales
+library(caret) 
+```
+
+
+# base
+```{r}
+turri <- data.frame(turri)
+head(turri)
+```
+
+# parametros
+```{r}
+# Parametros
+
+max_len <- 6 # el número de ejemplos anteriores que veremos (primero 6 meses)
+
+batch_size <- 20 # número de secuencias para ver a la vez durante el entrenamiento
+
+total_epochs <- 10 # cantidad de veces que veremos el conjunto de datos mientras entrenamos el modelo.
+
+# vamos a ver si con esto se subestima o sobreestima el modelo.
+```
+
+
+# muestreo
+```{r}
+RR <- turri$RR
+
+summary(RR)
+
+# Hacemos el muestreo correspondiente:
+
+# generamos una lista de indices para nuestros fragmentos traslapados
+
+start_indexes <- seq(1, length(RR) - (max_len + 1), by = 3)
+
+# creamos una matriz vacia
+
+dengue_matrix <- matrix(nrow = length(start_indexes), ncol = max_len + 1)
+
+# llenamos la matriz con las porciones de traslapes de nuestra base de datos
+
+for (i in 1:length(start_indexes)){
+  dengue_matrix[i,] <- RR[start_indexes[i]:(start_indexes[i] + max_len)]
+}
+
+# observamos como quedo la matriz al final
+
+str(dengue_matrix)
+summary(dengue_matrix) # no hay NA's en toda la matriz
+
+```
+
+# Datos para entrenar
+```{r}
+# Dividiremos la base en el mes a predecir (Y) y la secuencia de meses (X) utilizados para predecir 
+
+X <- dengue_matrix[,-ncol(dengue_matrix)]
+y <- dengue_matrix[,ncol(dengue_matrix)]
+
+# ---------------------------------------------------------------------------------------------
+# crear un índice para dividir nuestros datos en conjuntos de prueba y entrenamiento
+training_index <- createDataPartition(y, p = .9, # 0.9 de los datos que utilizamos para entrenar, el 0.1 queda por fuera
+                                  list = FALSE, 
+                                  times = 1)
+
+# datos de entrenamiento
+X_train <- array(X[training_index,], dim = c(length(training_index), max_len, 1))
+y_train <- y[training_index]
+
+# datos de prueba
+X_test <- array(X[-training_index,], dim = c(length(y) - length(training_index), max_len, 1))
+y_test <- y[-training_index]
+```
+
+# creacion del modelo
+```{r}
+mod <- keras_model_sequential()
+
+dim(X_train) # vemos la dimension de los datos para determinar cual deberia ser nuestra forma de entrada
+
+# input layer
+
+mod %>% layer_dense(input_shape = dim(X_train)[2:3], units = max_len)
+ 
+# en el modelo creado tenemos 6 salidas distintas para cada neurona dentro de la hiden layer
+
+mod %>% layer_simple_rnn(units = 6)
+
+# la salida (output layer)
+
+mod %>% layer_dense(units = 1, activation = 'relu')
+
+summary(mod)
+
+# esto es opcional y le indicara al modelo ademas de la perdida "loss" que debe hacer en caso de perder presicion
+mod %>% compile(loss = 'mae',optimizer = optimizer_rmsprop(),metrics = c('accuracy'))
+```
+
+# entrenar el modelo
+
+```{r}
+# Entrenando el modelo, esto puede tomar un tiempo!
+
+trained_model <- mod %>% fit(
+    x = X_train, # la secuencia utilizada para la prediccion 
+    y = y_train, # la secuencia que se pronosticara
+    batch_size = batch_size, # cuantas muestras pasar en nuestro modelo a la vez
+    epochs = total_epochs, # cuantas veces se examinara la base
+    validation_split = 0.1) # la cantidad de datos que no seran tomados en cuenta
+```
+
+# evaluando el modelo
+
+```{r}
+trained_model
+
+plot(trained_model)
+```
+
+
