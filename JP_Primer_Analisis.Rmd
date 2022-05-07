@@ -384,12 +384,14 @@ head(turri)
 turri_train = turri[1:180,]
 
 mod_nn = neuralnet(RR~Nino34SSTA+TNA+EVI+NDVI+NDWI+LSD+LSN, hidden = 8, act.fct = 'tanh', linear.output = F,data = turri_train)
+mod_nn_2 = neuralnet(RR~Nino34SSTA+TNA+EVI+NDVI+NDWI+LSD+LSN, hidden = 8, linear.output = T,data = turri_train)
 ```
 
 
 # plot
 ```{r}
 plot(mod_nn)
+plot(mod_nn_2)
 ```
 
 # ahora tomo una parte de la base como prueba
@@ -401,11 +403,13 @@ turri_test <- turri[181:227,-1] # elimino la variable respuesta
 # prediccion
 
 ```{r}
-pred = compute(mod_nn,turri_test)
+pred_1 = compute(mod_nn,turri_test)
+pred_2 = compute(mod_nn_2, turri_test)
 
-pred$net.result
+pred_1$net.result
+pred_2$net.result
 
-cbind(pred$net.result,turri[181:227,1])
+cbind(pred_1$net.result,pred_2$net.result,turri[181:227,1])
 ```
 
 por lo visto solo hay dos tipos de funcion de activacion para predicciones binarias
@@ -491,8 +495,14 @@ X_test <- array(X[-training_index,], dim = c(length(y) - length(training_index),
 y_test <- y[-training_index]
 ```
 
-# creacion del modelo
+# creacion de modelos
 ```{r}
+library(tibble)
+library(readr)
+library(ggplot2)
+library(keras)
+library(tensorflow)
+
 mod <- keras_model_sequential()
 
 dim(X_train) # vemos la dimension de los datos para determinar cual deberia ser nuestra forma de entrada
@@ -516,6 +526,15 @@ summary(mod)
 mod %>% compile(loss = 'mae',optimizer = optimizer_rmsprop(),metrics = c('accuracy'))
 
 # mod %>% compile(loss = 'mean_squared_error', optimizer = 'adam',metrics='mse')
+
+mod_2 <- keras_model_sequential() %>% 
+  layer_gru(units = 6, return_sequences = T, input_shape = list(NULL, 1)) %>% 
+  bidirectional(layer_gru(units = 6)) %>% 
+  layer_dense(units = 6, activation = "tanh") %>% 
+  layer_dense(units = 2, activation = "tanh") %>% 
+  layer_dense(units = 1, activation = "tanh")
+mod_2 <- compile(optimizer = optimizer_rmsprop(),loss = "mae")
+  
 ```
 
 # entrenar el modelo
