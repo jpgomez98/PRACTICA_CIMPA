@@ -426,9 +426,25 @@ library(caret)
 
 # base
 ```{r}
+load('bases_analisis.RData')
+base <- bases_ent %>% reduce(rbind)
+base_prueba = filter(base, Canton == "Turrialba")
+turri <- data.matrix(base_prueba[,c(1,2,20,8,9,15,16,17,18,19)])
+
 turri <- data.frame(turri)
 head(turri)
+
+turri$fecha <- paste(turri$Year, turri$Month, sep = "_")
+turri$fecha <- factor(turri$fecha)
+str(turri)
 ```
+
+# grafico
+```{r}
+ggplot(data = turri, aes(x = fecha,y = RR)) +
+  geom_point()
+```
+
 
 # parametros
 ```{r}
@@ -523,18 +539,18 @@ summary(mod)
 
 # esto es opcional y le indicara al modelo ademas de la perdida "loss" que debe hacer en caso de perder presicion
 
-mod %>% compile(loss = 'mae',optimizer = optimizer_rmsprop(),metrics = c('accuracy'))
+# mod %>% compile(loss = 'mean_squared_error', optimizer = 'rmsprop',metrics='mse')
 
-# mod %>% compile(loss = 'mean_squared_error', optimizer = 'adam',metrics='mse')
+mod %>% compile(loss = 'mse', optimizer = 'rmsprop',metrics='mse')
 
 mod_2 <- keras_model_sequential() %>% 
-  layer_gru(units = 6, return_sequences = T, input_shape = list(NULL, 1)) %>% 
-  bidirectional(layer_gru(units = 6)) %>% 
-  layer_dense(units = 6, activation = "tanh") %>% 
-  layer_dense(units = 2, activation = "tanh") %>% 
-  layer_dense(units = 1, activation = "tanh")
-mod_2 <- compile(optimizer = optimizer_rmsprop(),loss = "mae")
-  
+  layer_embedding(input_dim=as.integer(max_len),output_dim = 6) %>% 
+  layer_lstm(units = 1) %>% 
+  compile(
+    loss = 'mse',
+    optimizer = 'rmsprop',
+    metrics = c('accuracy')
+  )
 ```
 
 # entrenar el modelo
@@ -543,6 +559,13 @@ mod_2 <- compile(optimizer = optimizer_rmsprop(),loss = "mae")
 # Entrenando el modelo, esto puede tomar un tiempo!
 
 trained_model <- mod %>% fit(
+    x = X_train, # la secuencia utilizada para la prediccion 
+    y = y_train, # la secuencia que se pronosticara
+    batch_size = batch_size, # cuantas muestras pasar en nuestro modelo a la vez
+    epochs = total_epochs, # cuantas veces se examinara la base
+    validation_split = 0.1) # la cantidad de datos que no seran tomados en cuenta
+
+trained_model_2 <- mod_2 %>% fit(
     x = X_train, # la secuencia utilizada para la prediccion 
     y = y_train, # la secuencia que se pronosticara
     batch_size = batch_size, # cuantas muestras pasar en nuestro modelo a la vez
