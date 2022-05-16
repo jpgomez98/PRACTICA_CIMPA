@@ -384,6 +384,7 @@ head(turri)
 turri_train = turri[1:180,]
 
 mod_nn = neuralnet(RR~Nino34SSTA+TNA+EVI+NDVI+NDWI+LSD+LSN, hidden = 8, act.fct = 'tanh', linear.output = F,data = turri_train)
+
 mod_nn_2 = neuralnet(RR~Nino34SSTA+TNA+EVI+NDVI+NDWI+LSD+LSN, hidden = 8, linear.output = T,data = turri_train)
 ```
 
@@ -543,14 +544,14 @@ summary(mod)
 
 mod %>% compile(loss = 'mse', optimizer = 'rmsprop',metrics='mse')
 
-mod_2 <- keras_model_sequential() %>% 
-  layer_embedding(input_dim=as.integer(max_len),output_dim = 6) %>% 
-  layer_lstm(units = 1) %>% 
-  compile(
-    loss = 'mse',
-    optimizer = 'rmsprop',
-    metrics = c('accuracy')
-  )
+# mod_2 <- keras_model_sequential() %>% 
+#   layer_embedding(input_dim=as.integer(max_len),output_dim = 6) %>% 
+#   layer_lstm(units = 1) %>% 
+#   compile(
+#     loss = 'mse',
+#     optimizer = 'rmsprop',
+#     metrics = c('accuracy')
+#   )
 ```
 
 # entrenar el modelo
@@ -565,12 +566,12 @@ trained_model <- mod %>% fit(
     epochs = total_epochs, # cuantas veces se examinara la base
     validation_split = 0.1) # la cantidad de datos que no seran tomados en cuenta
 
-trained_model_2 <- mod_2 %>% fit(
-    x = X_train, # la secuencia utilizada para la prediccion 
-    y = y_train, # la secuencia que se pronosticara
-    batch_size = batch_size, # cuantas muestras pasar en nuestro modelo a la vez
-    epochs = total_epochs, # cuantas veces se examinara la base
-    validation_split = 0.1) # la cantidad de datos que no seran tomados en cuenta
+# trained_model_2 <- mod_2 %>% fit(
+#     x = X_train, # la secuencia utilizada para la prediccion 
+#     y = y_train, # la secuencia que se pronosticara
+#     batch_size = batch_size, # cuantas muestras pasar en nuestro modelo a la vez
+#     epochs = total_epochs, # cuantas veces se examinara la base
+#     validation_split = 0.1) # la cantidad de datos que no seran tomados en cuenta
 ```
 
 # evaluando el modelo
