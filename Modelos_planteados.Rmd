@@ -3,6 +3,8 @@ title: "Modelos NN"
 author: "Jimena Murillo"
 date: '2022-05-05'
 output: pdf_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 #Paquetes
@@ -22,7 +24,7 @@ library(tensorflow)
 #Construir una base con el cantón de Alajuela y partirla en train y test
 ```{r}
 load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
-
+load("base_cantones.RData")
 
 
 
@@ -56,10 +58,9 @@ min <- apply(Alajuela1,2,min)
 
 Alajuela1.2 <- apply(Alajuela1, 2, normalize)
 
-
 #Train y test
 
-data_train1 = as.data.frame(Alajuela1.2) %>% filter(Year < 0.85)#PARA ENTRENAR HASTA 2018
+data_train1 = as.data.frame(Alajuela1.2) %>% filter(Year < 0.85) # PARA ENTRENAR HASTA 2018
 data_test1 = as.data.frame(Alajuela1.2) %>% filter(Year >= 0.85)
 
 X_train1 = as.matrix(data_train1[,-ncol(data_train1)])
@@ -77,9 +78,7 @@ y_test1 = as.matrix(data_test1[,ncol(data_test1)])
 ```{r}
 
 Alajuela <- basecanton %>% filter(Canton == "Alajuela") %>% 
-  
-  dplyr::select(Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
-  
+    dplyr::select(Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
   arrange(Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
 
 
@@ -113,7 +112,7 @@ y_test = as.matrix(data_test[,ncol(data_test)])
 
 ```
 
-#Modelo inicial simple
+# Modelo inicial simple
 
 ```{r}
 
@@ -180,7 +179,7 @@ model2 <- keras_model_sequential()
 # our input layer
 model2 %>%
   layer_dense(input_shape = ncol(X_train1), units = 13) %>%
-  layer_dense(units = 8, activation = "relu")%>%
+  layer_dense(units = 10, activation = "relu")%>%
   layer_dense(units = 1, activation = "relu")
 
 
@@ -195,7 +194,7 @@ model2 %>% compile(loss = "mean_squared_error",
 trained_model2 <- model2 %>% fit(
   x = X_train1, # sequence we're using for prediction 
   y = y_train1, # sequence we're predicting
-  batch_size = 18, # how many samples to pass to our model at a time
+  batch_size = 19, # how many samples to pass to our model at a time
   epochs = 60, # how many times we'll look @ the whole dataset
   validation_split = 0.2) # how much data to hold out for testing as we go along
 
@@ -350,5 +349,93 @@ print(p)
 
 
 ```
+
+# Modelo JP
+
+```{r}
+
+# con nuevas variables
+X_train2 <- X_train[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
+X_test2 <- X_test[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
+
+
+model6 <- keras_model_sequential()
+# our input layer
+model6 %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train2),1), activation='swish') %>% 
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12)%>%
+  layer_dense(units = 1, activation = "swish")
+
+summary(model6)
+
+model6 %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model6 <- model6 %>% fit(
+  x = X_train2, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 50, # how many times we'll look @ the whole dataset
+  validation_split = 0.2,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+model6 %>% evaluate(X_test2, y_test)
+
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+results = model6 %>% predict(X_test2)
+
+results = denorm(results, max[length(Alajuela)], min[length(Alajuela)])
+
+data = cbind(results, Alajuela[197:nrow(Alajuela),length(Alajuela)])
+colnames(data) = c("Resultados", "RR")
+data = as.data.frame(data)
+
+Mes = seq(1, length(results))
+
+p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+  geom_line( aes(x = Mes, y = Resultados), colour = "red")
+
+print(p)
+
+```
+
+
+ formula <- RR~RRl1+Month+P1+P2+P3+P4+P5+P6+
+    N1+N2+N3+N4+N5+N6+
+    T1+T2+
+    L1+L2+
+    NV1+NV2
+    
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -11,7 +11,7 @@ library(MTS)
 
 # Carga de datos con riesgos relativos, índices climáticos y variables
 # climáticas de MODIS
-load('./Data/datos_totales.RData')
+load('datos_totales.RData')
 set.seed(1)
 
 ##ESCOGENCIA DE REZAGO MÁXIMO ####
@@ -277,6 +277,8 @@ for(i in 1:length(cantones$CCanton)){
                                 probs=c(0.025,0.975))
 }
 
+
+
 nombres_cantones <- datos_totales %>%
   dplyr::select(Canton,CCanton) %>%
   distinct()
@@ -331,4 +333,4 @@ metricas_tot_RF <- base_grafico_out_g_RF %>% group_modify(~metricas(.x))
 
 save.image('Resultados_PureProy_wClima_defTS6.RData')
 
-
+total <- data.frame(bases_test)
