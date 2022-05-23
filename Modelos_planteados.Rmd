@@ -411,19 +411,126 @@ print(p)
 ```
 
 
- formula <- RR~RRl1+Month+P1+P2+P3+P4+P5+P6+
-    N1+N2+N3+N4+N5+N6+
-    T1+T2+
-    L1+L2+
-    NV1+NV2
+*formula <- RR~RRl1+Month+P1+P2+P3+P4+P5+P6+N1+N2+N3+N4+N5+N6+T1+T2+L1+L2+NV1+NV2*
     
 
 ```{r}
+# con nuevas variables
+X_train2 <- X_train[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
+X_test2 <- X_test[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
 
+
+model6 <- keras_model_sequential()
+# our input layer
+model6 %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train2),1), activation='relu') %>% 
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12)%>%
+  layer_dense(units = 1, activation = "relu")
+
+summary(model6)
+
+model6 %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model6 <- model6 %>% fit(
+  x = X_train2, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 50, # how many times we'll look @ the whole dataset
+  validation_split = 0.2,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+model6 %>% evaluate(X_test2, y_test)
+
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+results = model6 %>% predict(X_test2)
+
+results = denorm(results, max[length(Alajuela)], min[length(Alajuela)])
+
+data = cbind(results, Alajuela[197:nrow(Alajuela),length(Alajuela)])
+colnames(data) = c("Resultados", "RR")
+data = as.data.frame(data)
+
+Mes = seq(1, length(results))
+
+p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+  geom_line( aes(x = Mes, y = Resultados), colour = "red")
+
+print(p)
 
 ```
 
 
+```{r}
+
+# con nuevas variables
+X_train2 <- X_train[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
+X_test2 <- X_test[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
+
+
+model6 <- keras_model_sequential()
+# our input layer
+model6 %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train2),1), activation='relu') %>% 
+  layer_dropout(rate = 0.8)%>%
+  layer_dense(units = 12)%>%
+  layer_dropout(rate = 0.2)%>%
+  layer_dense(units = 8)%>%
+  layer_dense(units = 1, activation = "relu")
+
+summary(model6)
+
+model6 %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model6 <- model6 %>% fit(
+  x = X_train2, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 50, # how many times we'll look @ the whole dataset
+  validation_split = 0.2,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+model6 %>% evaluate(X_test2, y_test)
+
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+results = model6 %>% predict(X_test2)
+
+results = denorm(results, max[length(Alajuela)], min[length(Alajuela)])
+
+data = cbind(results, Alajuela[197:nrow(Alajuela),length(Alajuela)])
+colnames(data) = c("Resultados", "RR")
+data = as.data.frame(data)
+
+Mes = seq(1, length(results))
+
+p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+  geom_line( aes(x = Mes, y = Resultados), colour = "red")
+
+print(p)
+
+```
 
 
 
