@@ -1,0 +1,414 @@
+---
+title: "Nuevos modelos experimentales"
+author: "Jimena Murillo"
+date: '2022-05-18'
+output: html_document
+---
+
+### Paquetes
+
+```{r}
+library(keras) # for deep learning
+library(tidyverse) # general utility functions
+library(caret) # machine learning utility functions
+library(tibble)
+library(readr)
+library(ggplot2)
+library(tensorflow)
+library(neuralnet)
+
+```
+
+# Construir una base con el cantón de Alajuela y partirla en train y test
+
+# Base de datos con lag
+
+```{r}
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+
+Alajuela <- basecanton %>% filter(Canton == "Alajuela") %>% 
+  
+  dplyr::select(Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
+  
+  arrange(Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+
+if(anyNA(Alajuela)){
+  Alajuela <- na.omit(Alajuela)
+}
+
+#Escala
+
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+Alajuela2 <- apply(Alajuela, 2, normalize)
+
+
+#Train y test
+
+data_train = as.data.frame(Alajuela2) %>% filter(Year < 0.85)#PARA ENTRENAR HASTA 2018
+data_test = as.data.frame(Alajuela2) %>% filter(Year >= 0.85)
+
+X_train = as.matrix(data_train[,-ncol(data_train)])
+y_train = as.matrix(data_train[,ncol(data_train)])
+
+X_test = as.matrix(data_test[,-ncol(data_test)])
+y_test = as.matrix(data_test[,ncol(data_test)])
+
+#Almacen de eval de los modelos
+
+mse = NULL
+mse2 = NULL
+
+```
+
+## Modelo bueno de la investigacion anterior
+
+**Modelo 1**
+
+```{r}
+set.seed(123)
+model <- keras_model_sequential()
+# our input layer
+model %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train),1), activation='tanh') %>% 
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 8, activation = "relu")%>%
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+# look at our model architecture
+summary(model)
+
+
+model %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model <- model %>% fit(
+  x = X_train, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 80, # how many times we'll look @ the whole dataset
+  validation_split = 0.1,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+mse[1] = (model %>% evaluate(X_test, y_test))[1]
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+pred = denorm(model %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#MSE CALCULADO
+
+mse2[1] = mean((pred - Alajuela$RR)^2)
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("Resultados", "RRreal")
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[197:235]))
+names(data2) = c("Resultados", "RRreal")
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+everyother2 <- function(x) x[(seq_along(Fecha))%%12 == 1]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = Resultados, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) 
+
+p2 <- ggplot(data2, aes(x = Fecha[197:235], y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[197:235], y = Resultados, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother2)
+
+
+print(p1)
+print(p2)
+
+
+```
+
+## Probando cambios
+
+**Modelo 2**
+
+```{r}
+set.seed(123)
+model2 <- keras_model_sequential()
+# our input layer
+model2 %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train),1), activation='tanh') %>% 
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 24, activation = "relu")%>%
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+# look at our model architecture
+summary(model2)
+
+
+model2 %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model2 <- model2 %>% fit(
+  x = X_train, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 80, # how many times we'll look @ the whole dataset
+  validation_split = 0.1,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+mse[2] = (model2 %>% evaluate(X_test, y_test))[1]
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+pred = denorm(model %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#MSE CALCULADO
+
+mse2[2] = mean((pred - Alajuela$RR)^2)
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("Resultados", "RRreal")
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[197:235]))
+names(data2) = c("Resultados", "RRreal")
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+everyother2 <- function(x) x[(seq_along(Fecha))%%12 == 1]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = Resultados, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) 
+
+p2 <- ggplot(data2, aes(x = Fecha[197:235], y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[197:235], y = Resultados, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother2)
+
+
+print(p1)
+print(p2)
+
+print(paste("MSE:", mse))
+
+```
+
+**Modelo 3**
+
+```{r}
+set.seed(123)
+model3 <- keras_model_sequential()
+# our input layer
+model3 %>% 
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train),1), activation='tanh') %>% 
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 24, activation = "relu")%>%
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 4, activation = "relu")%>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+# look at our model architecture
+summary(model3)
+
+
+model3 %>% compile(loss = "mean_squared_error", 
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+trained_model3 <- model3 %>% fit(
+  x = X_train, # sequence we're using for prediction 
+  y = y_train, # sequence we're predicting
+  batch_size = 18, # how many samples to pass to our model at a time
+  epochs = 80, # how many times we'll look @ the whole dataset
+  validation_split = 0.1,
+  shuffle = F) # how much data to hold out for testing as we go along
+
+mse[3] = (model3 %>% evaluate(X_test, y_test))[1]
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+pred = denorm(model %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#MSE CALCULADO
+
+mse2[3] = mean((pred - Alajuela$RR)^2)
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("Resultados", "RRreal")
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[197:235]))
+names(data2) = c("Resultados", "RRreal")
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+everyother2 <- function(x) x[(seq_along(Fecha))%%12 == 1]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = Resultados, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) 
+
+p2 <- ggplot(data2, aes(x = Fecha[197:235], y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[197:235], y = Resultados, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother2)
+
+
+print(p1)
+print(p2)
+
+print(paste("MSE:", mse))
+
+```
+
+# Probando modelos con NeuralNet
+
+
+
+
+
+
+
+**Modelo 4**
+
+```{r}
+library(neuralnet)
+
+
+#Plantear Modelo
+Modelo4 = neuralnet(RR ~ Year + Month + Nino12SSTA + Nino3SSTA + Nino4SSTA + Nino34SSTA + Nino34SSTA1 + Nino34SSTA2 + Nino34SSTA3 + Nino34SSTA4 + Nino34SSTA5 + Nino34SSTA6 + TNA + TNA1 + TNA2 +  EVI + NDVI + NDVI1 + NDVI2 + NDWI + LSD + LSD1 + LSD2 + LSN + Precip_t + Precip_t1 + Precip_t2 + Precip_t3 + Precip_t4 + Precip_t5 + Precip_t6 + RRl1, data_train, algorithm = "rprop+", hidden=c(32,16,16,8), threshold=0.5, rep=5, stepmax = 200, err.fct = "sse")
+
+plot(Modelo4, rep = "best")
+
+#Predecir
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+
+pred = denorm(model %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#MSE CALCULADO
+
+#MSE
+
+mse[4] = mean((as.numeric(pred) - as.numeric(Alajuela$RR))^2)/2
+mse2[4] = mean((as.numeric(pred) - as.numeric(Alajuela$RR))^2)/2
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("Resultados", "RRreal")
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[197:235]))
+names(data2) = c("Resultados", "RRreal")
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+everyother2 <- function(x) x[(seq_along(Fecha))%%12 == 1]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = Resultados, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) 
+
+p2 <- ggplot(data2, aes(x = Fecha[197:235], y = RRreal, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[197:235], y = Resultados, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother2)
+
+
+print(p1)
+print(p2)
+
+print(paste("MSE:", mse))
+
+
+
+#
+```
+
+
