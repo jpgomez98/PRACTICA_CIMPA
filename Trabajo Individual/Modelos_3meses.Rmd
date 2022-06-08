@@ -1,0 +1,459 @@
+---
+title: "Modelos_3meses"
+author: "Jimena Murillo"
+date: '2022-05-30'
+output: pdf_document
+---
+
+## Descripción
+
+Aquí se van a plantear los mejores modelos ya formulizados con un formato de predicción para 3 meses y utilizando tidymodels para homogenizar los resultados. También se van a crear nuevos modelos con nnet.
+
+### Paquetes y reproducibilidad
+
+```{r}
+# Set R random seed
+set.seed(104)
+library(keras)
+library(tensorflow)
+
+tensorflow::set_random_seed(104)
+
+
+library(readr)       
+library(broom.mixed) 
+library(dotwhisker) 
+library(tidyverse) 
+library(tibble)
+library(readr)
+library(ggplot2)
+library(neuralnet)
+```
+
+### Base de datos
+
+```{r}
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+
+Alajuela <- basecanton %>% filter(Canton == "Alajuela") %>% 
+  
+  dplyr::select(Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
+  
+  arrange(Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+
+if(anyNA(Alajuela)){
+  Alajuela <- na.omit(Alajuela)
+}
+
+#Escala
+
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+Alajuela2 <- apply(Alajuela, 2, normalize)
+
+
+#Train y test
+
+data_train = as.data.frame(Alajuela2) %>% filter(Year < 1)#PARA ENTRENAR HASTA 2018
+data_test = as.data.frame(Alajuela2) %>% filter(Year >= 1)
+
+X_train = as.matrix(data_train[,-ncol(data_train)])
+y_train = as.matrix(data_train[,ncol(data_train)])
+
+X_test = as.matrix(data_test[,-ncol(data_test)])
+y_test = as.matrix(data_test[,ncol(data_test)])
+
+#Almacen de eval de los modelos
+
+
+NRMSE = NULL
+
+
+metricas <- function(x,y){
+  NRMSE <- mean((x-y)^2)/mean(y)
+  return(data.frame(NRMSE))
+}
+
+```
+
+
+# Modelo 1
+
+La arquitectura fue propuesta en "Modelos_planteados_I" con el Modelo 4
+
+```{r}
+set.seed(123)
+model1 <- keras_model_sequential()
+# our input layer
+model1 %>%
+  layer_simple_rnn(units = 24, input_shape = c(ncol(X_train),1), activation='relu') %>%
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 1, activation = "relu")
+
+
+# look at our model architecture
+summary(model1)
+
+
+model1 %>% compile(loss = "mean_squared_error",
+                  optimizer = "adam",
+                  metric = "mean_absolute_error")
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+RR_pred = c()
+Fecha_pred = c()
+
+for (i in c(seq(from = 1, to = 234, by = 3 ),235)) {
+  
+  trained_model1 <- model1 %>% fit(
+  x = Alajuela2[1:(i+17),-33],
+  y = Alajuela2[1:(i+17),33],
+  batch_size = 18,
+  epochs = 45,
+  validation_split = 0.1,
+  shuffle = F)
+  
+  RR_pred[i:(i+2)] = denorm(model1 %>% predict(Alajuela2[(i+18):(i+20),-33]),  max[length(Alajuela)], min[length(Alajuela)])
+  Fecha_pred[i:(i+2)] = paste(Alajuela$Year[(i+18):(i+20)], Alajuela$Month[(i+18):(i+20)])
+  
+}
+
+
+data1 = as.data.frame(cbind(RR_pred, Alajuela$RR[19:235]))
+names(data1) = c("fit", "RR")
+
+everyother1 <- function(x) x[(seq_along(Fecha_pred) + 5)%%12 == 6]
+
+p1 <- ggplot(data1, aes(x = Fecha_pred, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha_pred, y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo")
+
+NRMSE[1] = metricas (data1)
+
+
+
+####Predicciones con el último training
+pred = denorm(model1 %>% predict(Alajuela2[,-33]),  max[length(Alajuela)], min[length(Alajuela)])
+
+data2 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data2) = c("fit", "RR")
+
+NRMSE[2]= metricas (data2)
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+p2 <- ggplot(data2, aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo")
+
+
+print(p1)
+print(p2)
+
+NRMSE
+
+#Ultimos 3 meses
+
+data3 = as.data.frame(cbind(RR_pred[]))
+
+
+```
+
+
+# Modelo 2
+
+Un intento con un modelo totalmente nuevo
+
+
+```{r}
+
+set.seed(123)
+model2 <- keras_model_sequential()
+
+# our input layer
+model2 %>% 
+  layer_simple_rnn(units = 32, input_shape = c(ncol(X_train),1), activation='tanh') %>% 
+  layer_dense(units = 16, activation = "relu")%>%
+  layer_dense(units = 16, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 8, activation = "relu")%>%
+  layer_dense(units = 8, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 4, activation = "relu")%>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+
+
+# look at our model architecture
+summary(model2)
+
+
+model2 %>% compile(loss = loss_mean_squared_logarithmic_error(), 
+                  optimizer = optimizer_adam(lr = 0.0007),
+                  metric = "mean_absolute_error")
+
+
+trained_model <- model2 %>% fit(
+  x = X_train, 
+  y = y_train, 
+  batch_size = 18, 
+  epochs = 60, 
+  validation_split = 0.1,
+  shuffle = F) 
+
+(model2 %>% evaluate(X_test, y_test))
+
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+pred = denorm(model2 %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model2 %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("fit", "RR")
+
+NRMSE[1] = metricas (data1$fit, data1$RR)
+
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[233:235]))
+names(data2) = c("fit", "RR")
+
+NRMSE[2] = metricas (data2$fit, data2$RR)
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = fit, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo")
+
+p2 <- ggplot(data2, aes(x = Fecha[233:235], y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[233:235], y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+ 
+  labs (x = "Fecha", y = "Riesgo Relativo")
+
+
+print(p1)
+print(p2)
+
+print(NRMSE)
+
+
+
+```
+
+
+
+
+```{r}
+
+#Plantear Modelo
+Modelo3 = neuralnet(RR ~ Year + Month + Nino12SSTA + Nino3SSTA + Nino4SSTA + Nino34SSTA + Nino34SSTA1 + Nino34SSTA2 + Nino34SSTA3 + Nino34SSTA4 + Nino34SSTA5 + Nino34SSTA6 + TNA + TNA1 + TNA2 +  EVI + NDVI + NDVI1 + NDVI2 + NDWI + LSD + LSD1 + LSD2 + LSN + Precip_t + Precip_t1 + Precip_t2 + Precip_t3 + Precip_t4 + Precip_t5 + Precip_t6 + RRl1, data_train, algorithm = "rprop+", hidden=c(32,16,16,8,8,4), threshold=0.5, rep=50, stepmax = 200, err.fct = "sse")
+
+plot(Modelo3, rep = "best")
+
+#Predecir
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+
+pred = denorm(compute(Modelo3, X_train)$net.result,  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(compute(Modelo3, X_test)$net.result, max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("fit", "RR")
+
+NRMSE[1] = metricas (data1)
+
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[233:235]))
+names(data2) = c("fit", "RR")
+
+NRMSE[2] = metricas(data2)
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = fit, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo")
+
+p2 <- ggplot(data2, aes(x = Fecha[233:235], y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[233:235], y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  labs (x = "Fecha", y = "Riesgo Relativo")
+
+
+print(p1)
+print(p2)
+
+NRMSE
+
+```
+
+
+
+
+# Modelo 4
+
+Un intento con un modelo totalmente nuevo
+
+
+```{r}
+
+set.seed(123)
+model4 <- keras_model_sequential()
+
+# our input layer
+model4 %>% 
+  layer_simple_rnn(units = 100, input_shape = c(ncol(X_train),1), activation='tanh') %>% 
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+
+
+# look at our model architecture
+summary(model4)
+
+
+model4 %>% compile(loss = loss_mean_squared_logarithmic_error(), 
+                  optimizer = optimizer_adam(lr = 0.0007),
+                  metric = "mean_absolute_error")
+
+
+trained_model <- model4 %>% fit(
+  x = X_train, 
+  y = y_train, 
+  batch_size = 18, 
+  epochs = 60, 
+  validation_split = 0.1,
+  shuffle = F) 
+
+(model4 %>% evaluate(X_test, y_test))
+
+
+#Escala
+
+denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+pred = denorm(model4 %>% predict(X_train),  max[length(Alajuela)], min[length(Alajuela)])
+results = denorm(model4 %>% predict(X_test), max[length(Alajuela)], min[length(Alajuela)])
+
+var2 = c(rep(0,length(pred)), rep(1, length(results)))
+
+pred = rbind(pred, results)
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("fit", "RR")
+
+NRMSE[1] = metricas (data1$fit, data1$RR)
+
+
+data2 = as.data.frame(cbind(results, Alajuela$RR[233:235]))
+names(data2) = c("fit", "RR")
+
+NRMSE[2] = metricas (data2$fit, data2$RR)
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+p1 <- ggplot(data1, aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = fit, colour = (var2>0)))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo")
+
+p2 <- ggplot(data2, aes(x = Fecha[233:235], y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[233:235], y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+ 
+  labs (x = "Fecha", y = "Riesgo Relativo")
+
+
+print(p1)
+print(p2)
+
+print(NRMSE)
+
+
+
+```
