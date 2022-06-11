@@ -1,0 +1,95 @@
+---
+title: "Clusters"
+author: "Jose Pablo Gómez Mata"
+date: "6/10/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# librerias
+```{r}
+library(tensorflow)
+library(keras)
+library(tidyverse)
+library(caret) 
+library(ggplot2)
+library(ggpubr)
+library(grid)
+library(cluster)
+```
+ 
+# carga de la base de datos 
+
+```{r}
+# load('bases_analisis.RData')
+# base <- bases_ent %>% reduce(rbind)
+
+load("datos_totales.Rdata")
+base <- datos_totales
+
+head(base)
+
+base_cor = select(base,Year,Month,Canton,RR)
+base_cor = as.data.frame(base_cor)
+base_cor$RR = as.numeric(base_cor$RR)
+base_cor$fecha = paste(base_cor$Year,"/",base$Month)
+base_cor <- select(base_cor,fecha,Canton,RR)
+
+df <- base_cor %>% pivot_wider(names_from = fecha,
+                               values_from = RR,
+                               values_fill = 0)
+df <- as.data.frame(df)
+rownames(df) <- c(df$Canton)
+
+```
+
+# matriz de distancias
+
+Como me interesa observar los patrones del riesgo relativo para los cantones utilizo la distancia de correlaciones
+
+```{r}
+df <- df[,-1]
+df2 <- t(df)
+df2[is.na(df2)] <- 0
+d_corr <- cor(df2)
+dist <- 1-d_corr
+dist <- as.dist(dist)
+```
+
+
+# clusters
+
+```{r}
+# Con el vecino mas cercano
+d1_s <- hclust(dist, method = "single")
+plot(d1_s, xlab = "", main = "Vecino mas cercano con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con el vecino mas lejano
+d1_c <- hclust(dist, method = "complete")
+plot(d1_c, xlab = "", main = "Vecino mas lejano con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con el salto promedio
+d1_a <- hclust(dist, method = "average")
+plot(d1_a, xlab = "", main = "Salto promedio con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con la distancia de Ward
+d1_w <- hclust(dist, method = "ward.D")
+plot(d1_w, xlab = "", main = "Distancia de Ward con correlacion", ylab = "Distancia", sub
+= "")
+
+```
+
+
+
+
+
+
+
+
+
+
+
