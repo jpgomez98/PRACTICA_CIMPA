@@ -7,6 +7,10 @@ editor_options:
   chunk_output_type: console
 ---
 
+# Referencias:
+
+Por que utilice la correlacion: https://arxiv.org/pdf/1601.02213.pdf 
+
 # librerias
 ```{r}
 library(tensorflow)
@@ -17,6 +21,7 @@ library(ggplot2)
 library(ggpubr)
 library(grid)
 library(cluster)
+library(factoextra)
 ```
  
 # carga de la base de datos 
@@ -44,7 +49,7 @@ rownames(df) <- c(df$Canton)
 
 ```
 
-# matriz de distancias
+# matriz de distancias (correlaciones de pearson)
 
 Como me interesa observar los patrones del riesgo relativo para los cantones utilizo la distancia de correlaciones
 
@@ -58,9 +63,18 @@ dist <- as.dist(dist)
 ```
 
 
+# matriz de distancias (euclidea)
+
+```{r}
+d_e <- dist(df)
+```
+
+
 # clusters
 
 ```{r}
+# Distancias entre individuos utilizando correlaciones
+
 # Con el vecino mas cercano
 d1_s <- hclust(dist, method = "single")
 plot(d1_s, xlab = "", main = "Vecino mas cercano con correlacion", ylab = "Distancia", sub
@@ -81,14 +95,35 @@ d1_w <- hclust(dist, method = "ward.D")
 plot(d1_w, xlab = "", main = "Distancia de Ward con correlacion", ylab = "Distancia", sub
 = "")
 
+# Distancias entre individuos utilizando la distancia Euclidea
+
+# Con el vecino mas cercano
+de1_s <- hclust(d_e, method = "single")
+plot(de1_s, xlab = "", main = "Vecino mas cercano con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con el vecino mas lejano
+de1_c <- hclust(d_e, method = "complete")
+plot(de1_c, xlab = "", main = "Vecino mas lejano con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con el salto promedio
+de1_a <- hclust(d_e, method = "average")
+plot(de1_a, xlab = "", main = "Salto promedio con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con la distancia de Ward
+de1_w <- hclust(d_e, method = "ward.D")
+plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
 ```
 
 
-
-
-
-
-
+```{r}
+fviz_dend(x=d1_w,k=4,cex=0.8)+geom_hline(yintercept=1.98,linetype="dashed")+
+ labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
+```
 
 
 
