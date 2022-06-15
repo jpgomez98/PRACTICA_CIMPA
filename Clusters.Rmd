@@ -7,6 +7,8 @@ editor_options:
   chunk_output_type: console
 ---
 
+# Base: datos_totales
+
 # Referencias:
 
 Por que utilice la correlacion: https://arxiv.org/pdf/1601.02213.pdf 
@@ -121,10 +123,108 @@ plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", yla
 
 
 ```{r}
-fviz_dend(x=d1_w,k=4,cex=0.8)+geom_hline(yintercept=1.98,linetype="dashed")+
+datos_tot <- fviz_dend(x=d1_w,k=4,cex=0.7)+geom_hline(yintercept=1.98,linetype="dashed")+
  labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
 ```
 
+# Base: basecanton
 
+# carga de la base de datos 
+
+```{r}
+load("base_cantones.Rdata")
+baseC <- datos_totales
+
+head(baseC)
+
+baseC_cor = select(baseC,Year,Month,Canton,RR)
+baseC_cor = as.data.frame(baseC_cor)
+baseC_cor$RR = as.numeric(baseC_cor$RR)
+baseC_cor$fecha = paste(baseC_cor$Year,"/",baseC_cor$Month)
+baseC_cor <- select(baseC_cor,fecha,Canton,RR)
+
+dfC <- baseC_cor %>% pivot_wider(names_from = fecha,
+                               values_from = RR)
+dfC <- as.data.frame(dfC)
+rownames(dfC) <- c(dfC$Canton)
+
+```
+
+# matriz de distancias (correlaciones de pearson)
+
+Como me interesa observar los patrones del riesgo relativo para los cantones utilizo la distancia de correlaciones
+
+```{r}
+dfC <- dfC[,-1]
+dfC2 <- t(dfC)
+dfC2 <- dfC2[-(256:262),]
+dfC2[is.na(dfC2)] <- 0
+d_corr_c <- cor(dfC2)
+dist_C <- 1-d_corr_c
+dist_C <- as.dist(dist_C)
+```
+
+
+# matriz de distancias (euclidea)
+
+```{r}
+d_e_C <- dist(dfC)
+```
+
+
+# clusters
+
+```{r}
+# Distancias entre individuos utilizando correlaciones
+
+# Con el vecino mas cercano
+d1_s <- hclust(dist_C, method = "single")
+plot(d1_s, xlab = "", main = "Vecino mas cercano con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con el vecino mas lejano
+d1_c <- hclust(dist_C, method = "complete")
+plot(d1_c, xlab = "", main = "Vecino mas lejano con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con el salto promedio
+d1_a <- hclust(dist_C, method = "average")
+plot(d1_a, xlab = "", main = "Salto promedio con correlacion", ylab = "Distancia", sub
+= "")
+
+# Con la distancia de Ward
+d1_w <- hclust(dist_C, method = "ward.D")
+plot(d1_w, xlab = "", main = "Distancia de Ward con correlacion", ylab = "Distancia", sub
+= "")
+
+# Distancias entre individuos utilizando la distancia Euclidea
+
+# Con el vecino mas cercano
+de1_s <- hclust(d_e_C, method = "single")
+plot(de1_s, xlab = "", main = "Vecino mas cercano con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con el vecino mas lejano
+de1_c <- hclust(d_e_C, method = "complete")
+plot(de1_c, xlab = "", main = "Vecino mas lejano con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con el salto promedio
+de1_a <- hclust(d_e_C, method = "average")
+plot(de1_a, xlab = "", main = "Salto promedio con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+# Con la distancia de Ward
+de1_w <- hclust(d_e_C, method = "ward.D")
+plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", ylab = "Distancia", sub
+= "")
+
+```
+
+
+```{r}
+cantones <- fviz_dend(x=d1_w,k=4,cex=0.8)+geom_hline(yintercept=1.98,linetype="dashed")+
+ labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
+```
 
 
