@@ -1,0 +1,192 @@
+---
+title: "Analisis Overfitting sin IC"
+author: "Jimena Murillo"
+date: '2022-06-16'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+### Paquetes
+
+```{r}
+library(keras) # for deep learning
+library(tidyverse) # general utility functions
+library(caret) # machine learning utility functions
+library(tibble)
+library(readr)
+library(ggplot2)
+library(tensorflow)
+library(neuralnet)
+
+```
+
+
+## Datos
+
+```{r}
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+
+Alajuela <- basecanton %>% filter(Canton == "Alajuela") %>% 
+  
+  dplyr::select(Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
+  
+  arrange(Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+
+if(anyNA(Alajuela)){
+  Alajuela <- na.omit(Alajuela)
+}
+
+#Escala
+
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+Alajuela2 <- apply(Alajuela, 2, normalize)
+
+```
+
+
+```{r}
+#Train y test
+
+Fechas = c(1, 0.95, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55, 0.50)
+Eval = NULL
+Evalc = NULL
+Eval3 = NULL
+
+p1 = list()
+p2 = list()
+p3 = list()
+
+for (i in 1:length(Fechas)) {
+
+data_train = as.data.frame(Alajuela2) %>% filter(Year < Fechas[i])#PARA ENTRENAR HASTA 2018
+data_test = as.data.frame(Alajuela2) %>% filter(Year >= Fechas[i])
+
+X_train = as.matrix(data_train[,-ncol(data_train)])
+y_train = as.matrix(data_train[,ncol(data_train)])
+
+X_test = as.matrix(data_test[,-ncol(data_test)])
+y_test = as.matrix(data_test[,ncol(data_test)])
+
+## Modelo 
+
+set.seed(123)
+model <- keras_model_sequential()
+
+model %>% 
+  layer_simple_rnn(units = 100, input_shape = c(ncol(X_train),1), activation='tanh', 
+                   kernel_initializer= initializer_constant(0.5),
+                   bias_initializer=initializer_zeros()) %>% 
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+## Entrenar al modelo
+
+
+model %>% compile(
+  optimizer = "adam",
+  loss = "mse",
+  metrics = "mae")
+
+history <- model %>% fit(
+  X_train,
+  y_train,
+  epochs = 100,
+  batch_size = 18,
+  validation_split = 0.1,
+  shuffle = F
+)
+
+denorm <- function(x) {
+  return (x*(max(Alajuela$RR) - min(Alajuela$RR))+min(Alajuela$RR))
+}
+
+pred = denorm(model %>% predict(Alajuela2[,-33]))
+results = denorm(model %>% predict(X_test))
+results3 = denorm(model %>% predict(Alajuela2[233:235, -33]))
+
+#Grafico
+
+data1 = as.data.frame(cbind(pred, Alajuela$RR))
+names(data1) = c("fit", "RR")
+data2 = as.data.frame(cbind(results, Alajuela$RR[(236-length(results)):235]))
+names(data2) = c("fit", "RR")
+data3 = as.data.frame (cbind(results3, Alajuela$RR[233:235]))
+names(data3) = c("fit", "RR")
+
+Fecha = paste(Alajuela$Year, Alajuela$Month)
+
+everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+p1[[i]] <- ggplot(data1, aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha, y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
+  ggtitle(paste("Predicción desde", Fechas[i], sep = ": "))
+
+p3[[i]] <- ggplot(data3, aes(x = Fecha[233:235], y = RR, group = 1)) + geom_line(colour = "blue") +  
+  geom_line( aes(x = Fecha[233:235], y = fit, colour = "red"))+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+ 
+  labs (x = "Fecha", y = "Riesgo Relativo") + ggtitle(paste("Predicción 3 meses training hasta", Fechas[i], sep = ": "))
+
+
+
+metricas <- function(tabla){
+  NRMSE <- mean((tabla$fit-tabla$RR)^2)/mean(tabla$RR)
+  return(data.frame(NRMSE))
+}
+
+Eval[i] = as.numeric(metricas(data1))
+
+Evalc[i] = as.numeric(metricas(data2))
+
+Eval3[[i]] = as.numeric(metricas(data3))
+
+k_clear_session()
+}
+```
+
+# Resultados
+
+```{r}
+
+NRMSE = cbind (as.numeric(Eval), as.numeric(Evalc), as.numeric(Eval3))
+colnames(NRMSE) = c("Total", "Test", "Solo 2021")
+rownames(NRMSE) = c("2021", "2020 +", "2019 +", "2018 +", "2017+", "2016+", "2015+", "2014+", "2013+", "2012+", "2011+")
+as.data.frame(NRMSE)
+
+
+```
+
+
+# Gráficos
+
+```{r}
+p1
+p3
+
+```
