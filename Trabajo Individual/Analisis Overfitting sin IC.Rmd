@@ -47,9 +47,6 @@ normalize <- function(x) {
   return ((x - min(x)) / (max(x) - min(x)))
 }
 
-max <- apply(Alajuela,2,max)
-min <- apply(Alajuela,2,min)
-
 Alajuela2 <- apply(Alajuela, 2, normalize)
 
 ```
