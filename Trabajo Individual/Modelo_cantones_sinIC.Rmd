@@ -1,0 +1,245 @@
+---
+title: "Cantones sin IC"
+author: "Jimena Murillo"
+date: '2022-07-04'
+output: pdf_document
+---
+
+### Paquetes
+
+```{r}
+library(keras) # for deep learning
+library(tidyverse) # general utility functions
+library(caret) # machine learning utility functions
+library(tibble)
+library(readr)
+library(ggplot2)
+library(tensorflow)
+library(neuralnet)
+
+```
+
+
+
+
+## Datos
+
+```{r}
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+
+basecanton = basecanton  %>% 
+  
+  dplyr::select(Canton, Year,Month,Nino12SSTA, Nino3SSTA, Nino4SSTA,Nino34SSTA,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA, TNA1,TNA2, EVI, NDVI, NDVI1, NDVI2, NDWI, LSD, LSD1, LSD2, LSN, Precip_t, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
+  
+  arrange(Canton,Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+#Funciones
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+denorm <- function(x,base) {
+  return (x*(max(base$RR) - min(base$RR))+min(base$RR))
+}
+
+metricas <- function(tabla){
+  NRMSE <- mean((tabla$y_pred-tabla$RR)^2)/mean(tabla$RR)
+  return(data.frame(NRMSE))
+}
+
+
+
+
+basecanton2 = basecanton %>% group_by(basecanton$Canton) %>% 
+  mutate_if(is.numeric, normalize)
+basecanton2 = basecanton2[,-35]
+
+
+#Train y test
+
+data_train = as.data.frame(basecanton2) %>% filter(Year < 1)#PARA ENTRENAR HASTA 2018
+data_test = as.data.frame(basecanton2) %>% filter(Year >= 1)
+
+X_train = data_train[,-ncol(data_train)]
+y_train = as.data.frame(data_train[,c("Canton","RR")])
+
+X_test = as.data.frame(data_test[,-ncol(data_test)])
+y_test = as.data.frame(data_test[,c("Canton","RR")])
+
+
+
+Fecha = paste(basecanton$Year, basecanton$Month)
+Fecha = Fecha[1:235]
+
+
+
+```
+
+
+# Arquitectura del modelo
+
+
+```{r}
+
+model <- keras_model_sequential()
+
+# our input layer
+model %>% 
+  layer_simple_rnn(units = 100, input_shape = c(ncol(X_train)-1,1), activation='tanh', 
+                   kernel_initializer= initializer_constant(0.5),
+                   bias_initializer=initializer_zeros()) %>% 
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dense(units = 50, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dense(units = 25, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dropout(rate = 0.1)%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+
+```
+
+
+# Entrenamiento y predicciones
+
+```{r}
+
+Cantones = unique(basecanton$Canton)
+Eval.pd = NULL
+Eval.tot = NULL
+
+
+p1 = list()
+p2 = list()
+
+df1 = list()
+df2 = list()
+
+Predicciones = matrix(NA, ncol = 2, nrow = 3*length(Cantones))
+Index = seq(1,3*length(Cantones), 3)
+
+for (i in 1:length(Cantones)) {
+  
+  X_trainc = X_train %>% filter(Canton == Cantones[i])
+  X_trainc = as.matrix(X_trainc[,-1])
+  y_trainc = y_train %>% filter(Canton == Cantones[i])
+  y_trainc = as.matrix(y_trainc[,-1])
+  
+  X_testc = X_test %>% filter(Canton == Cantones[i])
+  X_testc = as.matrix(X_testc[,-1])
+  y_testc = y_test %>% filter(Canton == Cantones[i])
+  y_testc = as.matrix(y_testc[,-1])
+  
+  X_all = basecanton2 %>% filter(Canton == Cantones[i])
+  X_all = as.matrix(X_all[,-c(1,33)])
+
+  
+  base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
+  
+  
+  
+  model %>% compile(loss = "mse", 
+                  optimizer = optimizer_adam(lr = 0.0007),
+                  metric = "mean_absolute_error")
+
+
+  trained_model <- model %>% fit(
+    x = X_trainc, 
+    y = y_trainc, 
+    batch_size = 18, 
+    epochs = 100, 
+    validation_split = 0.1,
+    shuffle = F) 
+  
+
+  predice = function(x) {
+  y_values = (model %>% predict(x))
+  result = (y_values*(max(base$RR) - min(base$RR))+min(base$RR))
+  return (as.numeric(result))
+  }
+  
+  
+  
+  Predicciones[Index[i]:(Index[i]+2),1:2] = cbind(Cantones[i], predice(X_testc))
+  
+  
+  df1[[i]] = as.data.frame(cbind(predice(X_testc), y_testc, Fecha[233:235]))
+  colnames(df1[[i]]) = c("y_pred", "RR", "Fecha")
+  df1[[i]]$RR = as.numeric(df1[[i]]$RR)
+  df1[[i]]$y_pred = as.numeric(df1[[i]]$y_pred)
+  
+  
+  
+  p1[[i]] = ggplot(df1[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
+  geom_line( aes(x = Fecha, y = y_pred, colour = "red"))+   
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  labs (x = "Fecha", y = "Riesgo Relativo") +
+  ggtitle(paste("Predicciones 2021 del cantón", Cantones[i], sep = " "))
+  
+  Eval.pd[i] = as.numeric(metricas(df1[[i]]))
+
+
+  #### VALORES APROXIMADOS ####
+
+  ## Generar valores ajustados
+  
+  df2[[i]] = as.data.frame(cbind(predice(X_all), base$RR, Fecha))
+  colnames(df2[[i]]) = c("y_pred", "RR", "Fecha")
+  df2[[i]]$RR = as.numeric(df2[[i]]$RR)
+  df2[[i]]$y_pred = as.numeric(df2[[i]]$y_pred)
+  
+
+  everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+  p2[[i]] = ggplot(df2[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
+  geom_line(aes(x = Fecha, y = y_pred, colour = "red"))+   
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
+  ggtitle(paste("Valores aproximados de training del cantón", Cantones[i], sep = " "))
+  
+  
+  
+  Eval.tot[i] = as.numeric(metricas(df2[[i]]))
+  
+  
+  k_clear_session()
+}
+
+
+```
+
+
+## Resultados de métricas
+
+```{r}
+
+Metricas = cbind (Eval.pd, Eval.tot)
+colnames(Metricas) = c("NMRSE 2021", "NMRSE total")
+rownames(Metricas) = Cantones
+as.data.frame(Metricas)
+
+```
+
+
+## Gráficos
+
+```{r}
+p1
+p2
+
+
+```

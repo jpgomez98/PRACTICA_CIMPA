@@ -371,15 +371,15 @@ df1 <- data.frame(
 ggplot(df1, aes(x, y_pred)) + 
   geom_line(colour = "blue") + 
   geom_line( aes(x, y = Alajuela$RR, colour = "red"))+
-  geom_ribbon(aes(ymin = e_u_lower, ymax = e_u_upper), alpha = 0.3)
+  geom_ribbon(aes(ymin = u_overall_lower, ymax = u_overall_upper), alpha = 0.3)
 
 
 
 metricas <- function(tabla){
   NRMSE <- mean((tabla$y_pred-Alajuela$RR)^2)/mean(Alajuela$RR)
-  NIS_95 <- mean((tabla$e_u_upper-tabla$e_u_lower)+
-                   (2/0.05)*(tabla$e_u_lower-Alajuela$RR)*(Alajuela$RR<tabla$e_u_lower)+
-                   (2/0.05)*(Alajuela$RR-tabla$e_u_upper)*(Alajuela$RR>tabla$e_u_upper))/mean(Alajuela$RR)
+  NIS_95 <- mean((tabla$u_overall_upper-tabla$u_overall_lower)+
+                   (2/0.05)*(tabla$u_overall_lower-Alajuela$RR)*(Alajuela$RR<tabla$u_overall_lower)+
+                   (2/0.05)*(Alajuela$RR-tabla$u_overall_upper)*(Alajuela$RR>tabla$u_overall_upper))/mean(Alajuela$RR)
   return(data.frame(NRMSE,NIS_95))
 }
 

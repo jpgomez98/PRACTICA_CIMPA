@@ -33,10 +33,26 @@ basecanton = basecanton  %>%
   
   arrange(Canton,Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
 
+#Funciones
 
 normalize <- function(x) {
   return ((x - min(x)) / (max(x) - min(x)))
 }
+
+denorm <- function(x,base) {
+  return (x*(max(base$RR) - min(base$RR))+min(base$RR))
+}
+
+metricas <- function(tabla){
+  NRMSE <- mean((tabla$y_pred-tabla$y)^2)/mean(tabla$y)
+  NIS_95 <- mean((tabla$e_u_upper-tabla$e_u_lower)+
+                   (2/0.05)*(tabla$e_u_lower-tabla$y)*(tabla$y<tabla$e_u_lower)+
+                   (2/0.05)*(tabla$y-tabla$e_u_upper)*(tabla$y>tabla$e_u_upper))/mean(tabla$y)
+  return(data.frame(NRMSE,NIS_95))
+}
+
+
+
 
 basecanton2 = basecanton %>% group_by(basecanton$Canton) %>% 
   mutate_if(is.numeric, normalize)
@@ -54,11 +70,10 @@ y_train = as.data.frame(data_train[,c("Canton","RR")])
 X_test = as.data.frame(data_test[,-ncol(data_test)])
 y_test = as.data.frame(data_test[,c("Canton","RR")])
 
-#Almacen de eval de los modelos
 
 
-NRMSE = NULL
-NIS_95 = NULL
+Fecha = paste(basecanton$Year, basecanton$Month)
+Fecha = Fecha[1:235]
 
 
 
@@ -70,139 +85,135 @@ NIS_95 = NULL
 ## Generar un Wrapper para el learning dropout
 ```{r}
 
-# R6 wrapper class, a subclass of KerasWrapper
-ConcreteDropout <- R6::R6Class("ConcreteDropout",
-  
-  inherit = KerasWrapper,
-  
-  public = list(
-    weight_regularizer = NULL,
-    dropout_regularizer = NULL,
-    init_min = NULL,
-    init_max = NULL,
-    is_mc_dropout = NULL,
-    supports_masking = TRUE,
-    p_logit = NULL,
-    p = NULL,
+model.gen = function(X_train, y_train, X_test, X_all, RR) {
+
+  # R6 wrapper class, a subclass of KerasWrapper
+  ConcreteDropout <- R6::R6Class("ConcreteDropout",
     
-    initialize = function(weight_regularizer,
-                          dropout_regularizer,
-                          init_min,
-                          init_max,
-                          is_mc_dropout) {
-      self$weight_regularizer <- weight_regularizer
-      self$dropout_regularizer <- dropout_regularizer
-      self$is_mc_dropout <- is_mc_dropout
-      self$init_min <- k_log(init_min) - k_log(1 - init_min)
-      self$init_max <- k_log(init_max) - k_log(1 - init_max)
-    },
+    inherit = KerasWrapper,
     
-    build = function(input_shape) {
-      super$build(input_shape)
+    public = list(
+      weight_regularizer = NULL,
+      dropout_regularizer = NULL,
+      init_min = NULL,
+      init_max = NULL,
+      is_mc_dropout = NULL,
+      supports_masking = TRUE,
+      p_logit = NULL,
+      p = NULL,
       
-      self$p_logit <- super$add_weight(
-        name = "p_logit",
-        shape = shape(1),
-        initializer = initializer_random_uniform(self$init_min, self$init_max),
-        trainable = TRUE
-      )
-
-      self$p <- k_sigmoid(self$p_logit)
-
-      input_dim <- input_shape[[2]]
-
-      weight <- private$py_wrapper$layer$kernel
+      initialize = function(weight_regularizer,
+                            dropout_regularizer,
+                            init_min,
+                            init_max,
+                            is_mc_dropout) {
+        self$weight_regularizer <- weight_regularizer
+        self$dropout_regularizer <- dropout_regularizer
+        self$is_mc_dropout <- is_mc_dropout
+        self$init_min <- k_log(init_min) - k_log(1 - init_min)
+        self$init_max <- k_log(init_max) - k_log(1 - init_max)
+      },
       
-      kernel_regularizer <- self$weight_regularizer * 
-                            k_sum(k_square(weight)) / 
-                            (1 - self$p)
-      
-      dropout_regularizer <- self$p * k_log(self$p)
-      dropout_regularizer <- dropout_regularizer +  
-                             (1 - self$p) * k_log(1 - self$p)
-      dropout_regularizer <- dropout_regularizer * 
-                             self$dropout_regularizer * 
-                             k_cast(input_dim, k_floatx())
-
-      regularizer <- k_sum(kernel_regularizer + dropout_regularizer)
-      super$add_loss(regularizer)
-    },
-    
-    concrete_dropout = function(x) {
-      eps <- k_cast_to_floatx(k_epsilon())
-      temp <- 0.1
-      
-      unif_noise <- k_random_uniform(shape = k_shape(x))
-      
-      drop_prob <- k_log(self$p + eps) - 
-                   k_log(1 - self$p + eps) + 
-                   k_log(unif_noise + eps) - 
-                   k_log(1 - unif_noise + eps)
-      drop_prob <- k_sigmoid(drop_prob / temp)
-      
-      random_tensor <- 1 - drop_prob
-      
-      retain_prob <- 1 - self$p
-      x <- x * random_tensor
-      x <- x / retain_prob
-      x
-    },
-
-    call = function(x, mask = NULL, training = NULL) {
-      if (self$is_mc_dropout) {
-        super$call(self$concrete_dropout(x))
-      } else {
-        k_in_train_phase(
-          function()
-            super$call(self$concrete_dropout(x)),
-          super$call(x),
-          training = training
+      build = function(input_shape) {
+        super$build(input_shape)
+        
+        self$p_logit <- super$add_weight(
+          name = "p_logit",
+          shape = shape(1),
+          initializer = initializer_random_uniform(self$init_min, self$init_max),
+          trainable = TRUE
         )
+  
+        self$p <- k_sigmoid(self$p_logit)
+  
+        input_dim <- input_shape[[2]]
+  
+        weight <- private$py_wrapper$layer$kernel
+        
+        kernel_regularizer <- self$weight_regularizer * 
+                              k_sum(k_square(weight)) / 
+                              (1 - self$p)
+        
+        dropout_regularizer <- self$p * k_log(self$p)
+        dropout_regularizer <- dropout_regularizer +  
+                               (1 - self$p) * k_log(1 - self$p)
+        dropout_regularizer <- dropout_regularizer * 
+                               self$dropout_regularizer * 
+                               k_cast(input_dim, k_floatx())
+  
+        regularizer <- k_sum(kernel_regularizer + dropout_regularizer)
+        super$add_loss(regularizer)
+      },
+      
+      concrete_dropout = function(x) {
+        eps <- k_cast_to_floatx(k_epsilon())
+        temp <- 0.1
+        
+        unif_noise <- k_random_uniform(shape = k_shape(x))
+        
+        drop_prob <- k_log(self$p + eps) - 
+                     k_log(1 - self$p + eps) + 
+                     k_log(unif_noise + eps) - 
+                     k_log(1 - unif_noise + eps)
+        drop_prob <- k_sigmoid(drop_prob / temp)
+        
+        random_tensor <- 1 - drop_prob
+        
+        retain_prob <- 1 - self$p
+        x <- x * random_tensor
+        x <- x / retain_prob
+        x
+      },
+  
+      call = function(x, mask = NULL, training = NULL) {
+        if (self$is_mc_dropout) {
+          super$call(self$concrete_dropout(x))
+        } else {
+          k_in_train_phase(
+            function()
+              super$call(self$concrete_dropout(x)),
+            super$call(x),
+            training = training
+          )
+        }
       }
-    }
+    )
   )
-)
+  
+  # function for instantiating custom wrapper
+  layer_concrete_dropout <- function(object, 
+                                     layer,
+                                     weight_regularizer = 1e-6,
+                                     dropout_regularizer = 1e-5,
+                                     init_min = 0.1,
+                                     init_max = 0.1,
+                                     is_mc_dropout = TRUE,
+                                     name = NULL,
+                                     trainable = TRUE) {
+    create_wrapper(ConcreteDropout, object, list(
+      layer = layer,
+      weight_regularizer = weight_regularizer,
+      dropout_regularizer = dropout_regularizer,
+      init_min = init_min,
+      init_max = init_max,
+      is_mc_dropout = is_mc_dropout,
+      name = name,
+      trainable = trainable
+    ))
+  }
 
-# function for instantiating custom wrapper
-layer_concrete_dropout <- function(object, 
-                                   layer,
-                                   weight_regularizer = 1e-6,
-                                   dropout_regularizer = 1e-5,
-                                   init_min = 0.1,
-                                   init_max = 0.1,
-                                   is_mc_dropout = TRUE,
-                                   name = NULL,
-                                   trainable = TRUE) {
-  create_wrapper(ConcreteDropout, object, list(
-    layer = layer,
-    weight_regularizer = weight_regularizer,
-    dropout_regularizer = dropout_regularizer,
-    init_min = init_min,
-    init_max = init_max,
-    is_mc_dropout = is_mc_dropout,
-    name = name,
-    trainable = trainable
-  ))
-}
-
-# sample size (training data)
-n_train <- 232
-# sample size (validation data)
-n_val <- 3
-# prior length-scale
-l <- 4e-3
-# initial value for weight regularizer 
-wd <- l^2/232
-# initial value for dropout regularizer
-dd <- 2/3
-
-```
-
-
-# Arquitectura del modelo:
-
-
-```{r}
+  # sample size (training data)
+  n_train <- 232
+  # sample size (validation data)
+  n_val <- 3
+  # prior length-scale
+  l <- 4e-3
+  # initial value for weight regularizer 
+  wd <- l^2/232
+  # initial value for dropout regularizer
+  dd <- 2/3
+  
+  # Arquitectura del modelo
 
 
   input_dim <- 32
@@ -210,98 +221,66 @@ dd <- 2/3
   
   input <- layer_input(shape = input_dim)
   
- output <- input %>% layer_concrete_dropout(
-layer = layer_dense(units = 100, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_dense(units = 50, activation = "relu") %>%
-layer_concrete_dropout(
-layer = layer_dense(units = 50, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 50, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 50, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_dense(units = 25, activation = "relu") %>%
-layer_concrete_dropout(
-layer = layer_dense(units = 25, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 25, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 25, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_dense(units = 12, activation = "relu") %>%
-layer_concrete_dropout(
-layer = layer_dense(units = 12, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 12, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_dense(units = 6, activation = "relu") %>%
-layer_concrete_dropout(
-layer = layer_dense(units = 6, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-) %>% layer_concrete_dropout(
-layer = layer_dense(units = 6, activation = "relu"),
-weight_regularizer = wd,
-dropout_regularizer = dd
-)
-
-```
-
-## Funcion de loss heterocedástica
-
-```{r}
-heteroscedastic_loss <- function(y_true, y_pred) {
+  output <- input %>% layer_concrete_dropout(
+  layer = layer_dense(units = 100, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_dense(units = 50, activation = "relu") %>%
+  layer_concrete_dropout(
+  layer = layer_dense(units = 50, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 50, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 50, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_dense(units = 25, activation = "relu") %>%
+  layer_concrete_dropout(
+  layer = layer_dense(units = 25, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 25, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 25, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_dense(units = 12, activation = "relu") %>%
+  layer_concrete_dropout(
+  layer = layer_dense(units = 12, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 12, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_dense(units = 6, activation = "relu") %>%
+  layer_concrete_dropout(
+  layer = layer_dense(units = 6, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  ) %>% layer_concrete_dropout(
+  layer = layer_dense(units = 6, activation = "relu"),
+  weight_regularizer = wd,
+  dropout_regularizer = dd
+  )
+ 
+ 
+ ## Loss function
+ heteroscedastic_loss <- function(y_true, y_pred) {
     mean <- y_pred[, 1:output_dim]
     log_var <- y_pred[, (output_dim + 1):(output_dim * 2)]
     precision <- k_exp(-log_var)
     k_sum(precision * (y_true - mean) ^ 2 + log_var, axis = 2)
   }
-```
-
-# Entrenamiento de modelos para cada cantón
-
-## Entrenar al modelo y predecir 
-
-```{r}
-
-Cantones = unique(basecanton$Canton)
-Evaluacion3 = matrix(NA, ncol = 2, nrow = length(Cantones))
-plot_list3 = list()
-
-plot_list_c = list()
-Evaluacion_c = matrix(NA, ncol = 2, nrow = length(Cantones))
-
-for (i in 1:length(Cantones)) {
-  
-  X_trainc = X_train %>% filter(Canton == Cantones[i])
-  X_trainc = as.matrix(X_trainc[,-1])
-  y_trainc = y_train %>% filter(Canton == Cantones[i])
-  y_trainc = as.matrix(y_trainc[,-1])
-  
-  X_testc = X_test %>% filter(Canton == Cantones[i])
-  X_testc = as.matrix(X_testc[,-1])
-  y_testc = y_test %>% filter(Canton == Cantones[i])
-  y_testc = as.matrix(y_testc[,-1])
-  
-  base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
-  
-
-  
+   
+ 
   ## Output del Modelo
 
 
@@ -319,7 +298,9 @@ for (i in 1:length(Cantones)) {
 
   output <- layer_concatenate(list(mean, log_var))
 
+  
   model <- keras_model(input, output)
+
 
   
   model %>% compile(
@@ -328,11 +309,10 @@ for (i in 1:length(Cantones)) {
   metrics = c(custom_metric("heteroscedastic_loss", heteroscedastic_loss)))
 
 
-  print(Cantones[i])
 
   history <- model %>% fit(
-    X_trainc,
-    y_trainc,
+    X_train,
+    y_train,
     epochs = 50,
     batch_size = 18,
     validation_split = 0.1,
@@ -340,228 +320,208 @@ for (i in 1:length(Cantones)) {
   )
 
 
-  ## MonteCarlo sampling 3 meses
+  ## MonteCarlo sampling 
 
-
-  denorm <- function(x) {
+  
+  denorm <- function(x , base) {
     return (x*(max(base$RR) - min(base$RR))+min(base$RR))
   }
-
-  num_MC_samples <- 100
-
-  MC_samples <- array(0, dim = c(num_MC_samples, nrow(X_testc), 2 * output_dim))
+  
+  num_MC_samples <- 300
+  
+  samples = list()
+  
+  MC_samples.pd <- array(0, dim = c(num_MC_samples, nrow(X_test), 2 * output_dim))
   for (k in 1:num_MC_samples) {
-    MC_samples[k, , ] <- denorm((model %>% predict(X_testc)))
-  }
-
-
-  ## Generar intervalo de confianza 3 meses
-
-
-  # First, we determine the predictive mean as an average of the MC samples’ mean output:
-
-  # the means are in the first output column
-  means = NULL
-  means <- MC_samples[, , 1:output_dim]  
-  
-  # average over the MC samples
-  predictive_mean <- apply(means, 2, mean) 
-
-
-
-  # To calculate epistemic uncertainty, we again use the mean output, but this time we’re interested in the variance of the MC   samples:
-
-  epistemic_uncertainty <- apply(means, 2, var) 
-
-
-
-  # Then aleatoric uncertainty is the average over the MC samples of the variance output. 1 .
-  
-  logvar = NULL
-  logvar <- MC_samples[, , (output_dim + 1):(output_dim * 2)]
-  aleatoric_uncertainty <- exp(colMeans(logvar))
-
-
-# Note how this procedure gives us uncertainty estimates individually for every prediction. How do they look?
-  
-  #Obtener RR originales
-  
-  y_testc = denorm(y_testc)
-  
-  
-  
-
-  df <- data.frame(
-    x = 1:nrow(X_testc),
-    y_testc = y_testc,
-    y_pred = predictive_mean,
-    e_u_lower = predictive_mean - sqrt(epistemic_uncertainty),
-    e_u_upper = predictive_mean + sqrt(epistemic_uncertainty),
-    a_u_lower = predictive_mean - sqrt(aleatoric_uncertainty),
-    a_u_upper = predictive_mean + sqrt(aleatoric_uncertainty),
-    u_overall_lower = predictive_mean - 
-                    sqrt(epistemic_uncertainty) - 
-                    sqrt(aleatoric_uncertainty),
-    u_overall_upper = predictive_mean + 
-                    sqrt(epistemic_uncertainty) + 
-                    sqrt(aleatoric_uncertainty)
-  )
-  
-  
-
-
-
-#Here, first, is epistemic uncertainty, with shaded bands indicating one standard deviation above resp. below the predicted mean:
-
-
-  
-  metricas <- function(df){
-    NRMSE <- mean((df$y_pred-y_testc)^2)/mean(y_testc)
-    NIS_95 <- mean((df$u_overall_upper-df$u_overall_lower)+
-                   (2/0.05)*(df$u_overall_lower-y_testc)*(y_testc<df$u_overall_lower)+
-                   (2/0.05)*(y_testc-df$u_overall_upper)*(y_testc>df$u_overall_upper))/mean(y_testc)
-    return(data.frame(NRMSE,NIS_95))
+    MC_samples.pd[k, , ] <- denorm((model %>% predict(X_test)),base)
   }
   
-
-
-  Evaluacion3[i,1:2] = as.numeric(metricas(df))
-
-  title = paste("Tendencia", Cantones[i], sep = " ")
-  
-
-
-  p = ggplot(df, aes(x, y_pred)) + 
-    geom_line(colour = "blue") + 
-    geom_line( aes(x, y = y_testc, colour = "red"))+
-    geom_ribbon(aes(ymin = u_overall_lower, ymax = u_overall_upper), alpha = 0.3)+
-    ggtitle(title)
-
-  plot_list3[[i]] = p
-  
-
-  
-  #### VALORES APROXIMADOS ####
-
-  X_test_all = basecanton2 %>% filter(Canton == Cantones[i])
-  X_test_all = as.matrix(X_test_all[,-c(1,33)])
-  y_test_all = basecanton %>% filter(Canton == Cantones[i])
-  y_test_all = as.matrix(y_test_all$RR)
-
-  denorm <- function(x) {
-    return (x*(max(base$RR) - min(base$RR))+min(base$RR))
-  }
-
-  num_MC_samples <- 100
-
-  MC_samples <- array(0, dim = c(num_MC_samples, 235, 2 * output_dim))
+  MC_samples.tot <- array(0, dim = c(num_MC_samples, nrow(X_all), 2 * output_dim))
   for (k in 1:num_MC_samples) {
-    MC_samples[k, , ] <- denorm((model %>% predict(X_test_all)))
-  }
-
-
-  ## Generar intervalo de confianza 3 meses
-
-
-  # First, we determine the predictive mean as an average of the MC samples’ mean output:
-
-  # the means are in the first output column
-  means = NULL
-  means <- MC_samples[, , 1:output_dim]  
-  
-  # average over the MC samples
-  predictive_mean <- apply(means, 2, mean) 
-
-
-
-  # To calculate epistemic uncertainty, we again use the mean output, but this time we’re interested in the variance of the MC   samples:
-
-  epistemic_uncertainty <- apply(means, 2, var) 
-
-
-
-  # Then aleatoric uncertainty is the average over the MC samples of the variance output. 1 .
-  
-  logvar = NULL
-  logvar <- MC_samples[, , (output_dim + 1):(output_dim * 2)]
-  aleatoric_uncertainty <- exp(colMeans(logvar))
-
-
-# Note how this procedure gives us uncertainty estimates individually for every prediction. How do they look?
-  
-  #Obtener RR originales
-  
-  
-
-  df <- data.frame(
-    x = 1:nrow(X_test_all),
-    y_test_all = y_test_all,
-    y_pred = predictive_mean,
-    e_u_lower = predictive_mean - sqrt(epistemic_uncertainty),
-    e_u_upper = predictive_mean + sqrt(epistemic_uncertainty),
-    a_u_lower = predictive_mean - sqrt(aleatoric_uncertainty),
-    a_u_upper = predictive_mean + sqrt(aleatoric_uncertainty),
-    u_overall_lower = predictive_mean - 
-                    sqrt(epistemic_uncertainty) - 
-                    sqrt(aleatoric_uncertainty),
-    u_overall_upper = predictive_mean + 
-                    sqrt(epistemic_uncertainty) + 
-                    sqrt(aleatoric_uncertainty)
-  )
-  
-  
-
-
-
-#Here, first, is epistemic uncertainty, with shaded bands indicating one standard deviation above resp. below the predicted mean:
-
-
-  
-  metricas <- function(df){
-    NRMSE <- mean((df$y_pred-y_test_all)^2)/mean(y_test_all)
-    NIS_95 <- mean((df$e_u_upper-df$e_u_lower)+
-                   (2/0.05)*(df$e_u_lower-y_test_all)*(y_test_all<df$e_u_lower)+
-                   (2/0.05)*(y_test_all-df$e_u_upper)*(y_test_all>df$e_u_upper))/mean(y_test_all)
-    return(data.frame(NRMSE,NIS_95))
+    MC_samples.tot[k, , ] <- denorm((model %>% predict(X_all)),base)
   }
   
-
-
-  Evaluacion_c[i,1:2] = as.numeric(metricas(df))
-
-  title = paste("Tendencia", Cantones[i], sep = " ")
   
+  samples[[1]] <- MC_samples.pd
+  samples[[2]] <- MC_samples.tot
 
+return (samples)
 
-  p1 = ggplot(df, aes(x, y_pred)) + 
-    geom_line(colour = "blue") + 
-    geom_line( aes(x, y = y_test_all, colour = "red"))+
-    geom_ribbon(aes(ymin = e_u_lower, ymax = e_u_upper), alpha = 0.3)+
-    ggtitle(title)
-
-  plot_list_c[[i]] = p1
-  
-
-  
 }
 
 ```
 
-# Resultados prediccion de últimos 3 meses
+# Entrenamiento de modelos para cada cantón
+
+## Entrenar al modelo y predecir 
 
 ```{r}
 
-Evaluacion3
-plot_list3
+Cantones = unique(basecanton$Canton)
+Eval.pd = matrix(NA, ncol = 2, nrow = length(Cantones))
+Eval.tot = matrix(NA, ncol = 2, nrow = length(Cantones))
+
+
+p1 = list()
+p2 = list()
+
+Predicciones = matrix(NA, ncol = 4, nrow = 3*length(Cantones))
+Index = seq(1,3*length(Cantones), 3)
+
+for (i in 1:length(Cantones)) {
+  
+  X_trainc = X_train %>% filter(Canton == Cantones[i])
+  X_trainc = as.matrix(X_trainc[,-1])
+  y_trainc = y_train %>% filter(Canton == Cantones[i])
+  y_trainc = as.matrix(y_trainc[,-1])
+  
+  X_testc = X_test %>% filter(Canton == Cantones[i])
+  X_testc = as.matrix(X_testc[,-1])
+  y_testc = y_test %>% filter(Canton == Cantones[i])
+  y_testc = as.matrix(y_testc[,-1])
+  
+  X_all = basecanton2 %>% filter(Canton == Cantones[i])
+  X_all = as.matrix(X_all[,-c(1,33)])
+
+  
+  base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
+  
+  samples = list()
+  samples = model.gen(X_trainc, y_trainc, X_testc, X_all, base)
+  
+  ## Generar intervalo de confianza
+  
+  output_dim  = 1
+  
+  MC_samples.pd = samples[[1]]
+  
+
+  means = NULL
+  means <- MC_samples.pd[, , 1:output_dim]  
+  
+  predictive_mean <- apply(means, 2, mean) 
+
+  epistemic_uncertainty <- apply(means, 2, var) 
+  
+  logvar = NULL
+  logvar <- MC_samples.pd[, , (output_dim + 1):(output_dim * 2)]
+  aleatoric_uncertainty <- exp(colMeans(logvar))
+
+  
+  y_testc = denorm(y_testc, base)
+  
+
+  df1 <- data.frame(
+    x = Fecha[(236-nrow(X_testc)):235],
+    y = y_testc,
+    y_pred = predictive_mean,
+    e_u_lower = predictive_mean - sqrt(epistemic_uncertainty),
+    e_u_upper = predictive_mean + sqrt(epistemic_uncertainty),
+    a_u_lower = predictive_mean - sqrt(aleatoric_uncertainty),
+    a_u_upper = predictive_mean + sqrt(aleatoric_uncertainty),
+    u_overall_lower = predictive_mean - 
+                    sqrt(epistemic_uncertainty) - 
+                    sqrt(aleatoric_uncertainty),
+    u_overall_upper = predictive_mean + 
+                    sqrt(epistemic_uncertainty) + 
+                    sqrt(aleatoric_uncertainty)
+  )
+  
+
+  Eval.pd[i,1:2] = as.numeric(metricas(df1))
+
+  
+  p1[[i]] = ggplot(df1, aes(x = x, y = y, group = 1)) + geom_line(colour = "blue") + 
+  geom_line( aes(x = x, y = y_pred, colour = "red"))+   
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  labs (x = "Fecha", y = "Riesgo Relativo") +
+  ggtitle(paste("Predicciones 2021 del cantón", Cantones[i], sep = " "))+
+  geom_ribbon(aes(ymin = e_u_lower, ymax = e_u_upper), alpha = 0.3) 
+  
+  Predicciones[Index[i]:(Index[i]+2),1:4] = cbind(Cantones[i], df1$e_u_lower, df1$y_pred, df1$e_u_upper)
+  
+  #### VALORES APROXIMADOS ####
+
+  ## Generar valores ajustados
+  
+  
+  MC_samples.tot = samples[[2]]
+
+  means = NULL
+  means <- MC_samples.tot[, , 1:output_dim]  
+  
+  # average over the MC samples
+  predictive_mean <- apply(means, 2, mean) 
+
+  epistemic_uncertainty <- apply(means, 2, var) 
+
+
+  logvar = NULL
+  logvar <- MC_samples.tot[, , (output_dim + 1):(output_dim * 2)]
+  aleatoric_uncertainty <- exp(colMeans(logvar))
+
+
+  df2 <- data.frame(
+    x = Fecha,
+    y = base$RR,
+    y_pred = predictive_mean,
+    e_u_lower = predictive_mean - sqrt(epistemic_uncertainty),
+    e_u_upper = predictive_mean + sqrt(epistemic_uncertainty),
+    a_u_lower = predictive_mean - sqrt(aleatoric_uncertainty),
+    a_u_upper = predictive_mean + sqrt(aleatoric_uncertainty),
+    u_overall_lower = predictive_mean - 
+                    sqrt(epistemic_uncertainty) - 
+                    sqrt(aleatoric_uncertainty),
+    u_overall_upper = predictive_mean + 
+                    sqrt(epistemic_uncertainty) + 
+                    sqrt(aleatoric_uncertainty)
+  )
+  
+  
+
+
+  Eval.tot[i,1:2] = as.numeric(metricas(df2))
+
+  everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+
+  p2[[i]] = ggplot(df2, aes(x = x, y = y, group = 1)) + geom_line(colour = "blue") + 
+  geom_line(aes(x = x, y = y_pred, colour = "red"))+   
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+  panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+  scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
+  ggtitle(paste("Valores aproximados de training del cantón", Cantones[i], sep = " "))+
+  geom_ribbon(aes(ymin = e_u_lower, ymax = e_u_upper), alpha = 0.3)
+
+  
+}
 
 
 ```
 
-## Valores aproximados dentro del modelo
+## Resultados de métricas
 
 ```{r}
-Evaluacion_c
-plot_list_c
+
+Metricas = cbind (Eval.pd, Eval.tot)
+colnames(Metricas) = c("NMRSE 2021", "NIS 2021", "NMRSE total", "NIS total")
+rownames(Metricas) = Cantones
+as.data.frame(Metricas)
+
+```
+
+## Gráficos
+
+```{r}
+p1
+p2
 
 
+```
+
+## Predicciones
+
+```{r}
+
+Predicciones
 ```
