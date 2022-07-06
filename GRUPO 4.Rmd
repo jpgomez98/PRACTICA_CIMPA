@@ -1,0 +1,409 @@
+---
+title: "Grupo 4"
+author: "Jose Pablo Gómez Mata"
+date: "6/22/2022"
+output: html_document
+---
+
+
+```{r}
+library(keras) # for deep learning
+library(tidyverse) # general utility functions
+library(caret) # machine learning utility functions
+library(tibble)
+library(readr)
+library(ggplot2)
+library(tensorflow)
+library(neuralnet)
+library(lubridate)
+```
+
+
+
+## Generar un Wrapper para el learning dropout
+```{r}
+# R6 wrapper class, a subclass of KerasWrapper
+ConcreteDropout <- R6::R6Class("ConcreteDropout",
+  
+  inherit = KerasWrapper,
+  
+  public = list(
+    weight_regularizer = NULL,
+    dropout_regularizer = NULL,
+    init_min = NULL,
+    init_max = NULL,
+    is_mc_dropout = NULL,
+    supports_masking = TRUE,
+    p_logit = NULL,
+    p = NULL,
+    
+    initialize = function(weight_regularizer,
+                          dropout_regularizer,
+                          init_min,
+                          init_max,
+                          is_mc_dropout) {
+      self$weight_regularizer <- weight_regularizer
+      self$dropout_regularizer <- dropout_regularizer
+      self$is_mc_dropout <- is_mc_dropout
+      self$init_min <- k_log(init_min) - k_log(1 - init_min)
+      self$init_max <- k_log(init_max) - k_log(1 - init_max)
+    },
+    
+    build = function(input_shape) {
+      super$build(input_shape)
+      
+      self$p_logit <- super$add_weight(
+        name = "p_logit",
+        shape = shape(1),
+        initializer = initializer_random_uniform(self$init_min, self$init_max),
+        trainable = TRUE
+      )
+      self$p <- k_sigmoid(self$p_logit)
+      input_dim <- input_shape[[2]]
+      weight <- private$py_wrapper$layer$kernel
+      
+      kernel_regularizer <- self$weight_regularizer * 
+                            k_sum(k_square(weight)) / 
+                            (1 - self$p)
+      
+      dropout_regularizer <- self$p * k_log(self$p)
+      dropout_regularizer <- dropout_regularizer +  
+                             (1 - self$p) * k_log(1 - self$p)
+      dropout_regularizer <- dropout_regularizer * 
+                             self$dropout_regularizer * 
+                             k_cast(input_dim, k_floatx())
+      regularizer <- k_sum(kernel_regularizer + dropout_regularizer)
+      super$add_loss(regularizer)
+    },
+    
+    concrete_dropout = function(x) {
+      eps <- k_cast_to_floatx(k_epsilon())
+      temp <- 0.1
+      
+      unif_noise <- k_random_uniform(shape = k_shape(x))
+      
+      drop_prob <- k_log(self$p + eps) - 
+                   k_log(1 - self$p + eps) + 
+                   k_log(unif_noise + eps) - 
+                   k_log(1 - unif_noise + eps)
+      drop_prob <- k_sigmoid(drop_prob / temp)
+      
+      random_tensor <- 1 - drop_prob
+      
+      retain_prob <- 1 - self$p
+      x <- x * random_tensor
+      x <- x / retain_prob
+      x
+    },
+    call = function(x, mask = NULL, training = NULL) {
+      if (self$is_mc_dropout) {
+        super$call(self$concrete_dropout(x))
+      } else {
+        k_in_train_phase(
+          function()
+            super$call(self$concrete_dropout(x)),
+          super$call(x),
+          training = training
+        )
+      }
+    }
+  )
+)
+# function for instantiating custom wrapper
+layer_concrete_dropout <- function(object, 
+                                   layer,
+                                   weight_regularizer = 1e-6,
+                                   dropout_regularizer = 1e-5,
+                                   init_min = 0.1,
+                                   init_max = 0.1,
+                                   is_mc_dropout = TRUE,
+                                   name = NULL,
+                                   trainable = TRUE) {
+  create_wrapper(ConcreteDropout, object, list(
+    layer = layer,
+    weight_regularizer = weight_regularizer,
+    dropout_regularizer = dropout_regularizer,
+    init_min = init_min,
+    init_max = init_max,
+    is_mc_dropout = is_mc_dropout,
+    name = name,
+    trainable = trainable
+  ))
+}
+# sample size (training data)
+n_train <- 196
+# sample size (validation data)
+n_val <- 3
+# prior length-scale
+l <- 4e-3
+# initial value for weight regularizer 
+wd <- l^2/196
+# initial value for dropout regularizer
+dd <- 2/3
+```
+
+
+# Arquitectura del modelo:
+
+
+```{r}
+  input_dim <- 21
+  output_dim <- 1
+  
+  input <- layer_input(shape = input_dim)
+  
+ output <- input %>% layer_concrete_dropout(
+layer = layer_dense(units = 100, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 100, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 50, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 50, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 50, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 25, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 25, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 25, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 25, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 25, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 12, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 12, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 12, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_dense(units = 6, activation = "swish") %>%
+layer_concrete_dropout(
+layer = layer_dense(units = 6, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+) %>% layer_concrete_dropout(
+layer = layer_dense(units = 10, activation = "swish"),
+weight_regularizer = wd,
+dropout_regularizer = dd
+)
+```
+
+## Funcion de loss heterocedástica
+
+```{r}
+heteroscedastic_loss <- function(y_true, y_pred) {
+    mean <- y_pred[, 1:output_dim]
+    log_var <- y_pred[, (output_dim + 1):(output_dim * 2)]
+    precision <- k_exp(-log_var)
+    k_sum(precision * (y_true - mean) ^ 2 + log_var, axis = 2)
+  }
+```
+
+# Grupo 4
+
+```{r}
+#---------- data -----------
+load("base_cantones.RData")
+# --------------------------
+grupo4 <- c("Orotina","Garabito","Quepos","Corredores","Golfito","Upala","Osa","Parrita") 
+Evaluacion3_G4 = matrix(NA, ncol = 2, nrow = length(grupo4))
+plot_list3_G4 = list()
+
+plot_normal = list()
+
+for(i in 1:length(grupo4)){
+  
+  grupo4 <- c("Orotina","Garabito","Quepos","Corredores","Golfito","Upala","Osa","Parrita")
+   Alajuela <- basecanton %>% filter(Canton == grupo4[i]) %>% 
+     dplyr::select(Year,Month,Precip_t1,Precip_t2,Precip_t3,Precip_t4,Precip_t5,Precip_t6,Nino34SSTA1,Nino34SSTA2,Nino34SSTA3,Nino34SSTA4,Nino34SSTA5,Nino34SSTA6,TNA1,TNA2,LSD1,LSD2,NDVI1,NDVI2,RRl1, RR) %>% 
+       arrange(Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+if(anyNA(Alajuela)){
+  Alajuela <- na.omit(Alajuela)
+}
+
+#Escala
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+Alajuela2 <- apply(Alajuela, 2, normalize)
+
+
+#Train y test
+data_train = as.data.frame(Alajuela2) %>% filter(Year < 0.85)#PARA ENTRENAR HASTA 2018
+data_test = as.data.frame(Alajuela2) %>% filter(Year >= 0.85)
+X_train = as.matrix(data_train[,-ncol(data_train)])
+y_train = as.matrix(data_train[,ncol(data_train)])
+X_test = as.matrix(data_test[,-ncol(data_test)])
+y_test = as.matrix(data_test[,ncol(data_test)])
+
+## Output del Modelo
+  mean <- output %>% layer_concrete_dropout(
+    layer = layer_dense(units = output_dim),
+    weight_regularizer = wd,
+    dropout_regularizer = dd
+  )
+
+  log_var <- output %>% layer_concrete_dropout(
+    layer_dense(units = output_dim),
+    weight_regularizer = wd,
+    dropout_regularizer = dd
+  )
+  output <- layer_concatenate(list(mean, log_var))
+  
+  model <- keras_model(input, output)
+  
+  # summary(model)
+  
+  model %>% compile(
+  optimizer = "adam",
+  loss = "mse",
+  metrics = c(custom_metric("heteroscedastic_loss", heteroscedastic_loss)))
+  
+  history <- model %>% fit(
+    X_train,
+    y_train,
+    epochs = 50,
+    batch_size = 18,
+    validation_split = 0.2,
+    shuffle = F
+  )
+  
+  model %>% evaluate(X_test, y_test)
+  
+  
+  denorm <- function(x, max, min) {
+  return (x*(max - min)+min)
+}
+
+max <- apply(Alajuela,2,max)
+min <- apply(Alajuela,2,min)
+
+results = model %>% predict(X_test)
+results = denorm(results, max[length(Alajuela)], min[length(Alajuela)])
+
+data = cbind(results, Alajuela[197:nrow(Alajuela),length(Alajuela)])
+colnames(data) = c("Resultados_Media","Resultados_Log_var", "RR")
+data = as.data.frame(data)
+Mes = seq(1, length(results)/2)
+
+p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+  geom_line( aes(x = Mes, y = Resultados_Media), colour = "red") + ggtitle(grupo4[i])
+
+plot_normal[[i]]=p
+
+#---------------------------------------------------------------------------- Bootstrap ----------------------------------------------------
+x <- data$Resultados_Media
+n <- 3 # tres meses
+Tn <- mean(x) # en este caso lo hago para la media
+# muestra bootstrap
+B <- 1000
+Tboot_b <- NULL
+for(b in 1:B) {  
+  xb <- sample(x, size = n, replace = TRUE)  
+  Tboot_b[b] <- mean(xb)}
+# Tboot_b[1:10]
+
+# calculo de estadisticos de bootstrap
+Tboot <- mean(Tboot_b)
+Vboot <- var(Tboot_b)
+sdboot <- sqrt(Vboot)
+
+# sesgo de bootstrap
+
+# mean(Tboot_b) - Tn
+
+# ahora el IC de bootstrap estudentizado
+B <- 1000
+Tboot_b <- NULL
+Tboot_bm <- NULL
+sdboot_b <- NULL
+
+for (b in 1:B) {  
+  xb <- sample(x, size = n, replace = TRUE)  
+  Tboot_b[b] <- mean(xb) # la varianza
+  for (m in 1:B) {    
+    xbm <- sample(xb, size = n, replace = TRUE)    
+    Tboot_bm[m] <- mean(xbm)  
+    }  
+  sdboot_b[b] <- sd(Tboot_bm)
+  }
+z_star <- (Tboot_b - Tn) / sdboot_b
+
+# hist(z_star)
+
+# calculo de limites
+# c(Tn - quantile(z_star, 1 - 0.05 / 2) * sdboot,  Tn - quantile(z_star, 0.05 / 2) * sdboot)
+LI = c(data$Resultados_Media - quantile(z_star, 1 - 0.05 / 2) * sdboot)
+LS = c(data$Resultados_Media - quantile(z_star, 0.05 / 2) * sdboot)
+
+
+data$LI = LI
+data$LS = LS
+
+
+p2 <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+  geom_line( aes(x = Mes, y = Resultados_Media), colour = "red") + 
+  geom_ribbon(aes(ymin=LI,ymax=LS), alpha=0.2, fill = "red") +
+  xlim(1,3)+ggtitle(grupo4[i])
+
+plot_list3_G4[[i]]= p2
+
+metricas <- function(data){
+  NRMSE <- mean((data$Resultados_Media-data$RR)^2)/mean(data$RR)
+  NIS_95 <- mean((data$LS-data$LI)+
+                   (2/0.05)*(data$LI-data$RR)*(data$RR<data$LI)+
+                   (2/0.05)*(data$RR-data$LS)*(data$RR>data$LS))/mean(data$RR)
+  return(data.frame(NRMSE,NIS_95))
+}
+
+Evaluacion3_G4[i,1:2] = as.numeric(metricas(data))
+
+}
+
+
+```
+
+```{r}
+# plots
+plot_list3_G4
+
+# metricas
+rownames(Evaluacion3_G4) <- grupo4
+colnames(Evaluacion3_G4) <- c("NRMSE","NIS_95")
+Evaluacion3_G4
+```
+
+

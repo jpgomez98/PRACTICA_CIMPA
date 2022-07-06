@@ -20,6 +20,7 @@ library(tibble)
 library(readr)
 library(ggplot2)
 library(tensorflow)
+library(lubridate)
 
 ```
 
@@ -77,7 +78,7 @@ y_test1 = as.matrix(data_test1[,ncol(data_test1)])
 
 
 
-#Datos con lag
+# Datos con lag
 ```{r}
 
 Alajuela <- basecanton %>% filter(Canton == "Alajuela") %>% 
@@ -181,7 +182,7 @@ set.seed(123)
 model2 <- keras_model_sequential()
 # our input layer
 model2 %>%
-  layer_dense(input_shape = ncol(X_train1), units = 13) %>%
+  layer_dense(input_shape = ncol(train1), units = 13) %>%
   layer_dense(units = 10, activation = "relu")%>%
   layer_dense(units = 1, activation = "relu")
 
@@ -360,7 +361,7 @@ print(p)
 # con nuevas variables
 X_train2 <- X_train[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
 X_test2 <- X_test[,c(2,7,8,9,10,11,12,14,15,16,18,19,20,21,22,23,24,26,27,28,29,30,31,32)]
-
+colnames(X_train2)
 
 model6 <- keras_model_sequential()
 # our input layer
@@ -520,7 +521,6 @@ max <- apply(Alajuela,2,max)
 min <- apply(Alajuela,2,min)
 
 results = model6 %>% predict(X_test2)
-
 results = denorm(results, max[length(Alajuela)], min[length(Alajuela)])
 
 data = cbind(results, Alajuela[197:nrow(Alajuela),length(Alajuela)])
@@ -534,7 +534,9 @@ p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
 
 print(p)
 
+df <- Alajuela %>% select(Year,Month, RR) %>% mutate(fecha=make_date(Year,Month,1))
 
+ggplot(df, aes(x = fecha,y = RR)) + geom_line()
 
 ```
 
@@ -542,31 +544,9 @@ print(p)
 # intervalos de confianza con bootstrap
 
 ```{r}
-library(nptest)
-
-# metemos los datos creados por el modelo
+#---------------------------------------------------------------------------- Bootstrap ----------------------------------------------------
 x <- data$Resultados
-
-# bootstrap no parametrico
-npbs <- np.boot(x = x, statistic = mean)
-npbs$percent[2,1]
-names(npbs)
-
-# distribución del bootstrap
-
-hist(npbs$boot.dist, xlab = "Parametro", main = "Distribucion del Bootstrap")
-box()
-abline(v = npbs$t0, lty = 2, col = "red")
-legend("topleft", "Promedio", lty = 2, col = "red", bty = "n")
-
-p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
-  geom_line( aes(x = Mes, y = Resultados), colour = "red") + geom_ribbon(aes(ymin=npbs$percent[2,1],ymax=npbs$percent[2,2]), alpha=0.2)
-
-print(p)
-
-# bootstrap ----------------------------------------------------
-x <- data$Resultados
-n <- length(x)
+n <- 3 # tres meses
 Tn <- mean(x) # en este caso lo hago para la media
 # muestra bootstrap
 B <- 1000
@@ -574,17 +554,17 @@ Tboot_b <- NULL
 for(b in 1:B) {  
   xb <- sample(x, size = n, replace = TRUE)  
   Tboot_b[b] <- mean(xb)}
-Tboot_b[1:10]
+# Tboot_b[1:10]
 
 # calculo de estadisticos de bootstrap
 
-(Tboot <- mean(Tboot_b))
-(Vboot <- var(Tboot_b))
-(sdboot <- sqrt(Vboot))
+Tboot <- mean(Tboot_b)
+Vboot <- var(Tboot_b)
+sdboot <- sqrt(Vboot)
 
 # sesgo de bootstrap
 
-mean(Tboot_b) - Tn
+# mean(Tboot_b) - Tn
 
 # ahora el IC de bootstrap estudentizado
 B <- 1000
@@ -603,9 +583,9 @@ for (b in 1:B) {
   }
 z_star <- (Tboot_b - Tn) / sdboot_b
 
-hist(z_star)
+# hist(z_star)
 
-# calsulo de limites
+# calculo de limites
 c(Tn - quantile(z_star, 1 - 0.05 / 2) * sdboot,  Tn - quantile(z_star, 0.05 / 2) * sdboot)
 LI = c(data$Resultados - quantile(z_star, 1 - 0.05 / 2) * sdboot)
 LS = c(data$Resultados - quantile(z_star, 0.05 / 2) * sdboot)
@@ -613,7 +593,7 @@ LS = c(data$Resultados - quantile(z_star, 0.05 / 2) * sdboot)
 
 data$LI = LI
 data$LS = LS
-head(data)
+
 
 p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
   geom_line( aes(x = Mes, y = Resultados), colour = "red") + 
@@ -622,9 +602,9 @@ p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
 
 print(p)
 
-ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
-  geom_line( aes(x = Mes, y = Resultados), colour = "red") + 
-  geom_ribbon(aes(ymin=LI,ymax=LS), alpha=0.2, fill = "red")
+# ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
+#   geom_line( aes(x = Mes, y = Resultados), colour = "red") + 
+#   geom_ribbon(aes(ymin=LI,ymax=LS), alpha=0.2, fill = "red")
 ```
 
 
@@ -718,28 +698,6 @@ print(p)
 # intervalos de confianza con bootstrap
 
 ```{r}
-library(nptest)
-
-# metemos los datos creados por el modelo
-x <- data$Resultados
-
-# bootstrap no parametrico
-npbs <- np.boot(x = x, statistic = mean)
-npbs$percent[2,1]
-names(npbs)
-
-# distribución del bootstrap
-
-hist(npbs$boot.dist, xlab = "Parametro", main = "Distribucion del Bootstrap")
-box()
-abline(v = npbs$t0, lty = 2, col = "red")
-legend("topleft", "Promedio", lty = 2, col = "red", bty = "n")
-
-p <- ggplot(data, aes(x = Mes, y = RR)) + geom_line(colour = "blue") +
-  geom_line( aes(x = Mes, y = Resultados), colour = "red") + geom_ribbon(aes(ymin=npbs$percent[2,1],ymax=npbs$percent[2,2]), alpha=0.2)
-
-print(p)
-
 # bootstrap ----------------------------------------------------
 x <- data$Resultados
 n <- length(x)

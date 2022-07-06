@@ -125,6 +125,7 @@ plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", yla
 ```{r}
 datos_tot <- fviz_dend(x=d1_w,k=4,cex=0.7)+geom_hline(yintercept=1.98,linetype="dashed")+
  labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
+datos_tot
 ```
 
 # Base: basecanton
@@ -223,8 +224,26 @@ plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", yla
 
 
 ```{r}
-cantones <- fviz_dend(x=d1_w,k=4,cex=0.8)+geom_hline(yintercept=1.98,linetype="dashed")+
+cantones <- fviz_dend(x=d1_w,k=4,cex=0.7)+geom_hline(yintercept=1.98,linetype="dashed")+
  labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
+cantones
 ```
+
+
+# MOdelo grupos de cantones
+
+```{r}
+base_g1 <- base %>% filter(Canton == c("La Cruz","Cañas","Liberia","Nicoya","Carrillo","SantaCruz","Puntarenas","Esparza","Montes de Oro"))
+unique(base_g1$Canton)
+summary(base_g1)
+
+```
+
+
+
+
+
+
+
 
 

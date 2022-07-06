@@ -582,4 +582,12 @@ trained_model
 plot(trained_model)
 ```
 
+```{r}
+
+qnorm(p = 0.80)
+qnorm(p=0.90,lower.tail = T)
+
+pnorm(q = 1.28)
+pnorm(q = 1.2)
+```
 
