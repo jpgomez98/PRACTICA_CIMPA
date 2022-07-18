@@ -225,8 +225,9 @@ plot(de1_w, xlab = "", main = "Distancia de Ward con la distancia Euclidea", yla
 
 ```{r}
 cantones <- fviz_dend(x=d1_w,k=4,cex=0.7)+geom_hline(yintercept=1.98,linetype="dashed")+
- labs(title="Distancia de correlacion y metodo de agrupamiento de Ward")+aes(y=Distancia)
+ labs(title="")+aes(y=Distancia)
 cantones
+
 ```
 
 
