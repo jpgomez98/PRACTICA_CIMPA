@@ -119,9 +119,6 @@ df2 = list()
 Predicciones = matrix(NA, ncol = 2, nrow = 3*length(Cantones))
 Index = seq(1,3*length(Cantones), 3)
 
-LI <- list()
-LS <- list()
-df3 <- list()
 
 for (i in 1:length(Cantones)) {
 
@@ -170,15 +167,15 @@ for (i in 1:length(Cantones)) {
   df1[[i]]$y_pred = as.numeric(df1[[i]]$y_pred)
   
 
-  Eval.pd[i] = as.numeric(metricas(df1[[i]]))
+ 
   #### VALORES APROXIMADOS ####
   ## Generar valores ajustados
   
-  df2[[i]] = as.data.frame(cbind(predice(X_trainc), base$RR, Fecha, Mes))
+  df2[[i]] = as.data.frame(cbind(predice(X_trainc), base$RR[1:232], Fecha[1:232], Mes[1:232]))
   colnames(df2[[i]]) = c("y_pred", "RR", "Fecha","Mes")
   df2[[i]]$RR = as.numeric(df2[[i]]$RR)
   df2[[i]]$y_pred = as.numeric(df2[[i]]$y_pred)
-  df2 = rbind(df2[[i]], df1[[i]])
+  df2[[i]] = rbind(df2[[i]], df1[[i]])
   
   everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
   
@@ -276,6 +273,9 @@ LS = matrix(ncol = 1, nrow = 235)
     # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
     ggtitle(paste(Cantones[i]))
   
+  
+  
+  Eval.pd[i,] = as.numeric(metricas(df1[[i]]))
   Eval.tot[i,] = as.numeric(metricas(df2[[i]]))
   
   
