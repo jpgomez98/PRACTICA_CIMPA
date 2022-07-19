@@ -41,10 +41,14 @@ normalize <- function(x) {
 denorm <- function(x,base) {
   return (x*(max(base$RR) - min(base$RR))+min(base$RR))
 }
-metricas <- function(tabla){
-  NRMSE <- mean((tabla$y_pred-tabla$RR)^2)/mean(tabla$RR)
-  return(data.frame(NRMSE))
-}
+
+ metricas <- function(tabla){
+    NRMSE <- mean((tabla$y_pred-tabla$RR)^2)/mean(tabla$RR)
+    NIS_95 <- mean((tabla$LS-tabla$LI)+
+                   (2/0.05)*(tabla$LI-tabla$RR)*(tabla$RR<tabla$LI)+
+                   (2/0.05)*(tabla$RR-tabla$LS)*(tabla$RR>tabla$LS))/mean(tabla$RR)
+    return(data.frame(NRMSE,NIS_95))
+  }
   
 predice = function(x) {
   y_values = (model %>% predict(x))
@@ -106,8 +110,8 @@ model %>%
 ```{r}
 
 Cantones = unique(basecanton$Canton)
-Eval.pd = NULL
-Eval.tot = NULL
+Eval.pd = matrix(ncol = 2, nrow = length(Cantones))
+Eval.tot = matrix(ncol = 2, nrow = length(Cantones))
 p1 = list()
 p2 = list()
 df1 = list()
@@ -168,15 +172,7 @@ for (i in 1:length(Cantones)) {
   df1[[i]]$RR = as.numeric(df1[[i]]$RR)
   df1[[i]]$y_pred = as.numeric(df1[[i]]$y_pred)
   
-  
-  
-  p1[[i]] = ggplot(df1[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
-    geom_line( aes(x = Fecha, y = y_pred, colour = "red"))+   
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-          panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
-    labs (x = "Fecha", y = "Riesgo Relativo") +
-    ggtitle(paste("Predicciones 2021 del cantón", Cantones[i], sep = " "))
-  
+
   Eval.pd[i] = as.numeric(metricas(df1[[i]]))
   #### VALORES APROXIMADOS ####
   ## Generar valores ajustados
@@ -190,14 +186,17 @@ for (i in 1:length(Cantones)) {
   
   # aqui hago las predicciones del 2000 hasta el 2020 con intervalos de bootstrap
   
-
+LI = matrix(ncol = 1, nrow = 235)
+LS = matrix(ncol = 1, nrow = 235)
   for (j in 1:12) {
+    
+    indx = which(df2[[i]]$Mes== j)
     x <- df2[[i]][Mes==j,1] # tomo el mes j con las predicciones para cada mes (es decir que tomo el mes j para los años que hayan reportados)
     x <- as.numeric(x)
     n <- length(x) # voy a hacer un remuestreo para la cantidad de observaciones que tenga de ese mes j
     Tn <- mean(x) # saco la media para estos datos
     
-    B <- 1000
+    B <- 500
     Tboot_b <- NULL
     for(b in 1:B) {  
       xb <- sample(x, size = n, replace = TRUE)  
@@ -227,42 +226,59 @@ for (i in 1:length(Cantones)) {
     z_star <- (Tboot_b - Tn) / sdboot_b
     
     # se crean los limites inferiores y superiores
-    LI[[j]] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 1 - 0.05 / 2) * sdboot)
-    LS[[j]] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 0.05 / 2) * sdboot)
+    LI[indx,] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 1 - 0.05 / 2) * sdboot)
+    LS[indx,] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 0.05 / 2) * sdboot)
   }
   
   
-  enero <- as.matrix(cbind(df2[[i]][Mes==1,],LI[[1]],LS[[1]]))
-  febrero <- as.matrix(cbind(df2[[i]][Mes==2,],LI[[2]],LS[[2]]))
-  marzo <- as.matrix(cbind(df2[[i]][Mes==3,],LI[[3]],LS[[3]]))
-  abril <- as.matrix(cbind(df2[[i]][Mes==4,],LI[[4]],LS[[4]]))
-  mayo <- as.matrix(cbind(df2[[i]][Mes==5,],LI[[5]],LS[[5]]))
-  junio <- as.matrix(cbind(df2[[i]][Mes==6,],LI[[6]],LS[[6]]))
-  julio <- as.matrix(cbind(df2[[i]][Mes==7,],LI[[7]],LS[[7]]))
-  agosto <- as.matrix(cbind(df2[[i]][Mes==8,],LI[[8]],LS[[8]]))
-  sept <- as.matrix(cbind(df2[[i]][Mes==9,],LI[[9]],LS[[9]]))
-  octu <- as.matrix(cbind(df2[[i]][Mes==10,],LI[[10]],LS[[10]]))
-  nov <- as.matrix(cbind(df2[[i]][Mes==11,],LI[[11]],LS[[11]]))
-  dici <- as.matrix(cbind(df2[[i]][Mes==12,],LI[[12]],LS[[12]]))
   
-  df3[[i]] <- as.data.frame(rbind(enero,febrero,marzo,abril,mayo,junio,julio,agosto,sept,octu,nov,dici))
-  colnames(df3[[i]]) <- c("y_pred","RR","Fecha","Mes","LI","LS")
-  df3[[i]]$y_pred <- as.numeric(df3[[i]]$y_pred)
-  df3[[i]]$RR <- as.numeric(df3[[i]]$RR)
-  df3[[i]]$LI <- as.numeric(df3[[i]]$LI)
-  df3[[i]]$LS <- as.numeric(df3[[i]]$LS)
+  #Añadir límites a la base df2
   
-  p2[[i]] = ggplot(df3[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
+  # ene <- as.matrix(cbind(df2[[i]][Mes==1,],LI[[1]],LS[[1]]))
+  # feb <- as.matrix(cbind(df2[[i]][Mes==2,],LI[[2]],LS[[2]]))
+  # mar <- as.matrix(cbind(df2[[i]][Mes==3,],LI[[3]],LS[[3]]))
+  # abr <- as.matrix(cbind(df2[[i]][Mes==4,],LI[[4]],LS[[4]]))
+  # may <- as.matrix(cbind(df2[[i]][Mes==5,],LI[[5]],LS[[5]]))
+  # jun <- as.matrix(cbind(df2[[i]][Mes==6,],LI[[6]],LS[[6]]))
+  # jul <- as.matrix(cbind(df2[[i]][Mes==7,],LI[[7]],LS[[7]]))
+  # ago <- as.matrix(cbind(df2[[i]][Mes==8,],LI[[8]],LS[[8]]))
+  # sep <- as.matrix(cbind(df2[[i]][Mes==9,],LI[[9]],LS[[9]]))
+  # oct <- as.matrix(cbind(df2[[i]][Mes==10,],LI[[10]],LS[[10]]))
+  # nov <- as.matrix(cbind(df2[[i]][Mes==11,],LI[[11]],LS[[11]]))
+  # dic <- as.matrix(cbind(df2[[i]][Mes==12,],LI[[12]],LS[[12]]))
+  
+  #df3[[i]] <- as.data.frame(rbind(ene,feb,mar,abr,may,jun,jul,ago,sep,oct,nov,dic))
+
+  df2[[i]] = cbind(df2[[i]], LI, LS)
+  df1[[i]] = cbind(df1[[i]], LI[233:235], LS[233:235])
+  colnames(df1[[i]]) = c("y_pred","RR","Fecha","Mes","LI","LS")
+  #colnames(df2[[i]]) <- c("y_pred","RR","Fecha","Mes","LI","LS")
+  #df3[[i]]$y_pred <- as.numeric(df3[[i]]$y_pred)
+  #df3[[i]]$RR <- as.numeric(df3[[i]]$RR)
+  #df3[[i]]$LI <- as.numeric(df3[[i]]$LI)
+  #df3[[i]]$LS <- as.numeric(df3[[i]]$LS)
+  
+  #Gráficos
+    
+  
+  p1[[i]] = ggplot(df1[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
+    geom_line( aes(x = Fecha, y = y_pred, colour = "red"))+   
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
+    labs (x = "Fecha", y = "Riesgo Relativo") + geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
+    ggtitle(paste("Predicciones 2021 del cantón", Cantones[i], sep = " "))
+  
+  
+  p2[[i]] = ggplot(df2[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
     geom_line(aes(x = Fecha, y = y_pred, colour = "red"))+   
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
           panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
     scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
-    geom_ribbon(aes(ymin=LI,ymax=LS), alpha=0.2, fill = "red") +
+    geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
     # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
     ggtitle(paste(Cantones[i]))
   
-  
-  Eval.tot[i] = as.numeric(metricas(df2[[i]]))
+  Eval.tot[i,] = as.numeric(metricas(df2[[i]]))
   
   
   k_clear_session()
