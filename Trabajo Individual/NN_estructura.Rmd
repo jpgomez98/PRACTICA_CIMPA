@@ -1,0 +1,113 @@
+---
+title: "Tutorial NN"
+author: "Jose Pablo Gómez Mata"
+date: "3/28/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Instalar los paquetes y librerias
+```{r}
+# install.packages("neuralnet")
+library(neuralnet)
+```
+
+# Se crea la base de datos
+Cabe destacar que la base que se va a crear tiene dos tipos de atributos para las columnas, caracteristica y etiqueta. En la imagen se observa que las primeras columnas (Puntuacion de conocimiento y de habilidades) son caracteristicas y la tercera columna (Estudiante asignado o colocado) es el atributo binario placed == 1 de lo contrario 0.
+
+![Alt text](/Users/jpgom/OneDrive/Documentos No tocar JP/I ciclo 4 año/Practica Profesional/ejemplo_NN.png)
+
+```{r}
+TKS=c(20,10,30,20,80,30)
+CSS=c(90,20,40,50,50,80)
+Placed=c(1,0,0,0,1,1)
+
+# creamos la base
+(df=data.frame(TKS,CSS,Placed))
+```
+
+# Se construye el modelo NN clasificador
+Donde:
+
+* Placed~TKS+CSS, Placed es la respuesta mientras que TKS y CSS son las variables dependientes o caracteristicas
+
+* df, es la base de datos que contiene las variables (si se omite solo hay que recordar que las variables irian con "df$" al inicio)
+* hidden, representa una capa con tres neuronas
+
+* act.fct = "logistic", se utiliza para seleccionar la funcion de activacion (existen mas pero depende del problema o a que resultado se quiera llegar esta funcion de activacion cambia.)
+
+* linear.ouput=FALSE, esto se utiliza para activar (FALSE) el act.fct descrito anteriormente, de lo contrario se indica TRUE
+
+
+```{r}
+mod_nn = neuralnet(Placed~TKS+CSS,data=df, hidden=6,act.fct = "logistic",linear.output = FALSE)
+```
+
+# Grafico de la red neuronal (NN)
+```{r}
+plot(mod_nn)
+```
+
+# Se crea una base de prueba
+Cabe destacar que esta base de datos solo tomará en cuenta las variables explicativas
+
+```{r}
+TKS=c(30,40,85)
+CSS=c(85,50,40)
+
+(prueba=data.frame(TKS,CSS))
+```
+
+# Prediccion
+En esta parte se predecirá la puntuacion de probabilidad para los datos utilizados en la base "prueba" utilizando la red neuronal (NN)
+
+```{r}
+pred <- compute(mod_nn,prueba)
+
+pred$net.result
+```
+
+# Conversión 
+Ahora se convertirán las probabilidades a atributos binarios (0 y 1) estableciendo un umbral de 0.5
+
+```{r}
+prob <- pred$net.result
+
+# aca es un if else simple, donde si la probabilidad es mayor a 0.5 entonces se coloca un 1, de lo contrario un 0
+resutado <- ifelse(prob > 0.5, 1, 0) 
+
+resutado
+cbind(prob,resutado)
+```
+
+
+# Pros
+
+* las redes neuronales son mas flexibles y pueden usarse en problemas de regresion y clasificaccion.
+* NN son buenos para bases no lineales con muchas entradas.
+* Se pueden utilizar based de datos con imagenes.
+* Pueden trabajar con cualquier numero de entradas y capas.
+
+# Contras
+* Hay otros algoritmos alternativos como SVM, arboles de desicion y regresiones, las cuales son mucho mas simples, rapidas, faciles de entrenar y tienen un mejor rendimiento.
+* las redes neuronales son como una caja negra, requieren mas tiempo de desarollo y ademas le exigen más a la compu
+* NN requiere muchos mas datos que otro algoritmo de ML
+* Solo se puede utilizar esta opcion si hay entradas de datos numericas y sin NAs
+
+# Casos donde han usado NN
+
+* Reconocimiento de patrones: las NN son muy capaces para resolver problemas de patrones, como heullas digitales, reconocimiento facial, etc..
+
+* Deteccion de Anomalias: Como explica arriba las NN son muy buenas detectando patrones, puede detectar con facilidad patrones inusuales que no concuerdan con los patrones generales
+
+* Predicciones en series de tiempo: las NN son buenas para detectar series de tiempo como el precio o la prediccion de tiempo.
+
+* Procesamiento del lenguaje natural: puede clasificar textos, reconocimiento de entidad nombrada (NER), reconocimiento de voz, coreccion ortografica, etc..
+
+
+
+
+
+
+
