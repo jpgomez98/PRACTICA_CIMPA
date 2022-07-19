@@ -208,7 +208,7 @@ LS = matrix(ncol = 1, nrow = 235)
     sdboot <- sqrt(Vboot)
     
     # ahora el IC de bootstrap estudentizado
-    B <- 1000
+    B <- 500
     Tboot_b <- NULL
     Tboot_bm <- NULL
     sdboot_b <- NULL
@@ -274,7 +274,7 @@ LS = matrix(ncol = 1, nrow = 235)
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
           panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
     scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
-    geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
+    geom_ribbon(data = df1[[i]], aes(ymin = LI,ymax= LS), alpha=0.2, fill = "red") +
     # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
     ggtitle(paste(Cantones[i]))
   
