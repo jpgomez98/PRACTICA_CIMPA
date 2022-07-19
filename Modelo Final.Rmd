@@ -2,8 +2,9 @@
 title: "Untitled"
 author: "Jose Pablo Gómez Mata"
 date: "7/6/2022"
-output: html_document
-editor_options: 
+output:
+  html_document:
+    df_print: paged
 ---
 
 ### Paquetes
