@@ -135,9 +135,6 @@ for (i in 1:length(Cantones)) {
   y_testc = y_test %>% filter(Canton == Cantones[i])
   y_testc = as.matrix(y_testc[,-1])
   
-  X_all = basecanton2 %>% filter(Canton == Cantones[i])
-  X_all = as.matrix(X_all[,-c(1,23)])
-  
   base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
   
   
@@ -177,10 +174,11 @@ for (i in 1:length(Cantones)) {
   #### VALORES APROXIMADOS ####
   ## Generar valores ajustados
   
-  df2[[i]] = as.data.frame(cbind(predice(X_all), base$RR, Fecha, Mes))
+  df2[[i]] = as.data.frame(cbind(predice(X_trainc), base$RR, Fecha, Mes))
   colnames(df2[[i]]) = c("y_pred", "RR", "Fecha","Mes")
   df2[[i]]$RR = as.numeric(df2[[i]]$RR)
   df2[[i]]$y_pred = as.numeric(df2[[i]]$y_pred)
+  df2 = rbind(df2[[i]], df1[[i]])
   
   everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
   
@@ -226,8 +224,8 @@ LS = matrix(ncol = 1, nrow = 235)
     z_star <- (Tboot_b - Tn) / sdboot_b
     
     # se crean los limites inferiores y superiores
-    LI[indx,] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 1 - 0.05 / 2) * sdboot)
-    LS[indx,] = c( as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 0.05 / 2) * sdboot)
+    LI[indx,] = as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 1 - 0.05 / 2) * sdboot
+    LS[indx,] = as.numeric(df2[[i]][Mes==j,1]) - quantile(z_star, 0.05 / 2) * sdboot
   }
   
   
