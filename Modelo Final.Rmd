@@ -123,6 +123,9 @@ Index = seq(1,3*length(Cantones), 3)
 
 
 for (i in 1:length(Cantones)) {
+
+  base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
+  
   X_trainc = X_train %>% filter(Canton == Cantones[i])
   X_trainc = as.matrix(X_trainc[,-1])
   y_trainc = y_train %>% filter(Canton == Cantones[i])
@@ -132,8 +135,9 @@ for (i in 1:length(Cantones)) {
   X_testc = as.matrix(X_testc[,-1])
   y_testc = y_test %>% filter(Canton == Cantones[i])
   y_testc = as.matrix(y_testc[,-1])
+  y_testc = denorm(y_testc, base)
   
-  base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
+
   
   
   
