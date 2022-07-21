@@ -305,7 +305,7 @@ LS = matrix(ncol = 1, nrow = 235)
 ## Resultados de métricas
 
 ```{r}
-Metricas = cbind (Eval.pd, Eval.tot)
+Metricas = cbind (round(Eval.pd,3), round(Eval.tot,3))
 colnames(Metricas) = c("NMRSE 2021", "NIS 2021", "NMRSE Total", "NIS total")
 rownames(Metricas) = Cantones
 as.data.frame(Metricas)
