@@ -29,7 +29,7 @@ Los datos disponibles son aquellos que a su vez fueron utilizados para el proyec
 Para el modelo de redes neuronales se decidió utilizar las variables climáticas del DLNM, el RR del mes anterior y variables temporales de año y mes.
 
 ```{r}
-load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+load("base_cantones.RData")
 
 basecanton = basecanton  %>% 
   
