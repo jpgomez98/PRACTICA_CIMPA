@@ -25,6 +25,9 @@ library(lubridate)
 
 ## Datos
 
+Los datos disponibles son aquellos que a su vez fueron utilizados para el proyecto anterior publicado en el 2022 donde se hacen las predicciones con modelos RF y GAMLSS.
+Para el modelo de redes neuronales se decidió utilizar las variables climáticas del DLNM, el RR del mes anterior y variables temporales de año y mes.
+
 ```{r}
 load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
 
@@ -78,7 +81,7 @@ Mes = Mes[1:235]
 
 
 # Arquitectura del modelo
-
+Aquí se plantea la arquitectura del modelo. Se comenzó con una arquitectura simple a la que se le fueron añadiendo capas y neuronas por capa hasta ir mejorando los resultados.
 
 ```{r}
 model <- keras_model_sequential()
@@ -107,9 +110,20 @@ model %>%
 
 # Entrenamiento y predicciones
 
+1. Se crean listas para almacenar los resulados de los modelos de cada cantón tanto de gráficos (denominadas con "p"), como riesgo relativo (df). 
+2. Se tiene una variable con los cantones a analizar llamada "Cantones".
+3. Se tiene una evaluación para los valores ajustados junto con los predichos llamada #Eval.tot" para almacener resultados de NRMSE y NIS. A su vez se almacenan los valores de NRMSE y NIS de los últmos tres meses en "Eval.pd".
+4. Se crea un ciclo for para cada cantón donde se obtienen los valores de train y test particulares para ese cantón, posterior a esto se compila y entrena el modelo con estos datos y se predice los valores para los tres últimos meses. También se usa "predict" para obtener valores ajustados del modelo a lo largo de los años de estudio. 
+5. Posterior a esto se crea un ciclo de bootstrap para la creación de intervalos de confianza tomando los valores de cada mes del año por separado para generar el intervalo.
+6. Por último se aplican las funciones de métricas y se crean gráficos para observar la información
+
 ```{r}
 
+# Se obtienen los nombres de todos los cantones
 Cantones = unique(basecanton$Canton)
+
+
+#Variables de almacenamiento de métricas, gráficos y resultados numéricos
 Eval.pd = matrix(ncol = 2, nrow = length(Cantones))
 Eval.tot = matrix(ncol = 2, nrow = length(Cantones))
 p1 = list()
@@ -118,14 +132,14 @@ p3 = list()
 df1 = list()
 df2 = list()
 df3 = list()
-Predicciones = matrix(NA, ncol = 2, nrow = 3*length(Cantones))
-Index = seq(1,3*length(Cantones), 3)
 
 
 for (i in 1:length(Cantones)) {
-
+  
+  #Se obtienen los valores de RR reales para el cantón i
   base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
   
+  #Se obtienen train y test para el cantón i y se combierten en matriz
   X_trainc = X_train %>% filter(Canton == Cantones[i])
   X_trainc = as.matrix(X_trainc[,-1])
   y_trainc = y_train %>% filter(Canton == Cantones[i])
@@ -138,14 +152,14 @@ for (i in 1:length(Cantones)) {
   y_testc = denorm(y_testc, base)
   
 
-  
+  #Se compila el modelo midiendo el error con el error cuadrático medio, optimizador adam con un rate de aprendizaje de 0.0007.
   
   
   model %>% compile(loss = "mse", 
                     optimizer = optimizer_adam(lr = 0.0007),
                     metric = "mean_absolute_error")
   
-  
+  # Se entrena el modelo 
   trained_model <- model %>% fit(
     x = X_trainc, 
     y = y_trainc, 
@@ -155,6 +169,8 @@ for (i in 1:length(Cantones)) {
     shuffle = F) 
   
   
+  #### VALORES PREDICHOS ####
+  # Para predecir los últimos 3 meses estos se predicen y se guarda el valor de RR obtenido en la variabale RRl del mes siguiente para que lo utilice para su predicción. Esto se almacena en la variable "pred".
   pred = NULL
   # predicciones a 3 meses
   for (k in 1:2) {
@@ -163,9 +179,8 @@ for (i in 1:length(Cantones)) {
   } 
   pred[3] = predice(X_testc)[3]
   
-  Predicciones[Index[i]:(Index[i]+2),1:2] = cbind(Cantones[i], pred)
   
-  # base para las predicciones
+  # Se crea una base para las predicciones, "df1", que tiene los valores predichos, los valores reales, fecha y mes.
   df1[[i]] = as.data.frame(cbind(pred, y_testc, Fecha[233:235],Mes[233:235]))
   colnames(df1[[i]]) = c("y_pred", "RR", "Fecha","Mes")
   df1[[i]]$RR = as.numeric(df1[[i]]$RR)
@@ -174,7 +189,7 @@ for (i in 1:length(Cantones)) {
 
  
   #### VALORES APROXIMADOS ####
-  ## Generar valores ajustados
+  ## Se generan los valores ajustados por medio de predict y se guardan en la variable "df2".
   
   df2[[i]] = as.data.frame(cbind(predice(X_trainc), base$RR[1:232], Fecha[1:232], Mes[1:232]))
   colnames(df2[[i]]) = c("y_pred", "RR", "Fecha","Mes")
@@ -182,16 +197,18 @@ for (i in 1:length(Cantones)) {
   df2[[i]]$y_pred = as.numeric(df2[[i]]$y_pred)
   df2[[i]] = rbind(df2[[i]], df1[[i]])
   
-  everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
   
-  # aqui hago las predicciones del 2000 hasta el 2020 con intervalos de bootstrap
+  #### BOOTSTRAP ####
+  # Aquí se haceno las predicciones del 2000 hasta el 2020 con intervalos de bootstrap
   
-LI = matrix(ncol = 1, nrow = 235)
-LS = matrix(ncol = 1, nrow = 235)
+LI = matrix(ncol = 1, nrow = 235) #Almacena Límite inferior
+LS = matrix(ncol = 1, nrow = 235) #Almacena Límite Superior
+
   for (j in 1:12) {
     
-    indx = which(df2[[i]]$Mes== j)
-    x <- df2[[i]][Mes==j,1] # tomo el mes j con las predicciones para cada mes (es decir que tomo el mes j para los años que hayan reportados)
+    indx = which(df2[[i]]$Mes== j) # índice de la posición de del mes j en la base de datos
+    
+    x <- df2[[i]][Mes==j,1] # tomo todos los meses j con las predicciones para cada mes (es decir que tomo el mes j para los años que hayan reportados)
     x <- as.numeric(x)
     n <- length(x) # voy a hacer un remuestreo para la cantidad de observaciones que tenga de ese mes j
     Tn <- mean(x) # saco la media para estos datos
@@ -232,36 +249,19 @@ LS = matrix(ncol = 1, nrow = 235)
   
   
   
-  #Añadir límites a la base df2
-  
-  # ene <- as.matrix(cbind(df2[[i]][Mes==1,],LI[[1]],LS[[1]]))
-  # feb <- as.matrix(cbind(df2[[i]][Mes==2,],LI[[2]],LS[[2]]))
-  # mar <- as.matrix(cbind(df2[[i]][Mes==3,],LI[[3]],LS[[3]]))
-  # abr <- as.matrix(cbind(df2[[i]][Mes==4,],LI[[4]],LS[[4]]))
-  # may <- as.matrix(cbind(df2[[i]][Mes==5,],LI[[5]],LS[[5]]))
-  # jun <- as.matrix(cbind(df2[[i]][Mes==6,],LI[[6]],LS[[6]]))
-  # jul <- as.matrix(cbind(df2[[i]][Mes==7,],LI[[7]],LS[[7]]))
-  # ago <- as.matrix(cbind(df2[[i]][Mes==8,],LI[[8]],LS[[8]]))
-  # sep <- as.matrix(cbind(df2[[i]][Mes==9,],LI[[9]],LS[[9]]))
-  # oct <- as.matrix(cbind(df2[[i]][Mes==10,],LI[[10]],LS[[10]]))
-  # nov <- as.matrix(cbind(df2[[i]][Mes==11,],LI[[11]],LS[[11]]))
-  # dic <- as.matrix(cbind(df2[[i]][Mes==12,],LI[[12]],LS[[12]]))
-  
-  #df3[[i]] <- as.data.frame(rbind(ene,feb,mar,abr,may,jun,jul,ago,sep,oct,nov,dic))
+  #Añadir límites a la base df2 y df1
 
   df2[[i]] = cbind(df2[[i]], LI, LS)
   df1[[i]] = cbind(df1[[i]], LI[233:235], LS[233:235])
   colnames(df1[[i]]) = c("y_pred","RR","Fecha","Mes","LI","LS")
   
   df3[[i]] = df2[[i]][185:235,]
-  #colnames(df2[[i]]) <- c("y_pred","RR","Fecha","Mes","LI","LS")
-  #df3[[i]]$y_pred <- as.numeric(df3[[i]]$y_pred)
-  #df3[[i]]$RR <- as.numeric(df3[[i]]$RR)
-  #df3[[i]]$LI <- as.numeric(df3[[i]]$LI)
-  #df3[[i]]$LS <- as.numeric(df3[[i]]$LS)
+
   
-  #Gráficos
+  ### Gráficos ###
     
+
+  everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]   #Función para estética del gráfico, acomoda las Fechas para que no se muestren todas, sino cada 6 meses.
   
   p1[[i]] = ggplot(df1[[i]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
     geom_line( aes(x = Fecha, y = y_pred, colour = "red"))+   
@@ -320,8 +320,11 @@ p2
 p3
 ```
 
+## Acomodo resumido de los gráficos
 
-# Graficos 1
+Se acomodan los gráficos con valores ajustados y predichos según los grupos formados por semejanza en el RR.
+
+### Graficos 1
 
 ```{r}
 # creo la "hoja en blanco"
@@ -333,20 +336,20 @@ define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
-print(p2[[1]], vp = define_region(row = 1, col = 1))
-print(p2[[2]], vp = define_region(row = 1, col = 2))
-print(p2[[3]], vp = define_region(row = 1, col = 3))
-print(p2[[4]], vp = define_region(row = 2, col = 1))
+print(p2[[12]], vp = define_region(row = 1, col = 1))
+print(p2[[4]], vp = define_region(row = 1, col = 2))
+print(p2[[13]], vp = define_region(row = 1, col = 3))
+print(p2[[17]], vp = define_region(row = 2, col = 1))
 print(p2[[5]], vp = define_region(row = 2, col = 2))
-print(p2[[6]], vp = define_region(row = 2, col = 3))
-print(p2[[7]], vp = define_region(row = 3, col = 1))
+print(p2[[27]], vp = define_region(row = 2, col = 3))
+print(p2[[23]], vp = define_region(row = 3, col = 1))
 print(p2[[8]], vp = define_region(row = 3, col = 2))
-print(p2[[9]], vp = define_region(row = 3, col = 3))
+print(p2[[16]], vp = define_region(row = 3, col = 3))
 
 ```
 
 
-# Graficos 2
+### Graficos 2
 
 ```{r}
 # creo la "hoja en blanco"
@@ -358,60 +361,57 @@ define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
-print(p2[[10]], vp = define_region(row = 1, col = 1))
-print(p2[[11]], vp = define_region(row = 1, col = 2))
-print(p2[[12]], vp = define_region(row = 1, col = 3))
-print(p2[[13]], vp = define_region(row = 2, col = 1))
-print(p2[[14]], vp = define_region(row = 2, col = 2))
-print(p2[[15]], vp = define_region(row = 2, col = 3))
-print(p2[[16]], vp = define_region(row = 3, col = 1))
-print(p2[[17]], vp = define_region(row = 3, col = 2))
-print(p2[[18]], vp = define_region(row = 3, col = 3))
-```
-
-
-# Graficos 3
-
-```{r}
-# creo la "hoja en blanco"
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 3)))
-
-# una funcion que simplifica el acomodo de los graficos
-define_region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-}
-
-print(p2[[19]], vp = define_region(row = 1, col = 1))
-print(p2[[20]], vp = define_region(row = 1, col = 2))
+print(p2[[14]], vp = define_region(row = 1, col = 1))
+print(p2[[15]], vp = define_region(row = 1, col = 2))
 print(p2[[21]], vp = define_region(row = 1, col = 3))
-print(p2[[22]], vp = define_region(row = 2, col = 1))
-print(p2[[23]], vp = define_region(row = 2, col = 2))
-print(p2[[24]], vp = define_region(row = 2, col = 3))
-print(p2[[25]], vp = define_region(row = 3, col = 1))
-print(p2[[26]], vp = define_region(row = 3, col = 2))
-print(p2[[27]], vp = define_region(row = 3, col = 3))
+print(p2[[30]], vp = define_region(row = 2, col = 1))
+print(p2[[22]], vp = define_region(row = 2, col = 2))
+print(p2[[11]], vp = define_region(row = 2, col = 3))
+print(p2[[29]], vp = define_region(row = 3, col = 1))
+print(p2[[28]], vp = define_region(row = 3, col = 2))
+print(p2[[31]], vp = define_region(row = 3, col = 3))
+
 ```
 
-
-# Graficos 4
+### Graficos 3
 
 ```{r}
 # creo la "hoja en blanco"
 grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 2)))
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 3)))
 
 # una funcion que simplifica el acomodo de los graficos
 define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
-print(p2[[28]], vp = define_region(row = 1, col = 1:2))
-print(p2[[29]], vp = define_region(row = 2, col = 1))
-print(p2[[30]], vp = define_region(row = 2, col = 2))
-print(p2[[31]], vp = define_region(row = 3, col = 1))
-print(p2[[32]], vp = define_region(row = 3, col = 2))
+print(p2[[7]], vp = define_region(row = 1, col = 1))
+print(p2[[1]], vp = define_region(row = 1, col = 2))
+print(p2[[25]], vp = define_region(row = 1, col = 3))
+print(p2[[26]], vp = define_region(row = 2, col = 1))
+print(p2[[2]], vp = define_region(row = 2, col = 2))
+print(p2[[3]], vp = define_region(row = 2, col = 3))
 
 ```
 
+### Graficos 4
 
+```{r}
+# creo la "hoja en blanco"
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
+
+# una funcion que simplifica el acomodo de los graficos
+define_region <- function(row, col){
+  viewport(layout.pos.row = row, layout.pos.col = col)
+}
+
+print(p2[[18]], vp = define_region(row = 1, col = 1:3))
+print(p2[[9]], vp = define_region(row = 2, col = 1))
+print(p2[[24]], vp = define_region(row = 2, col = 2))
+print(p2[[6]], vp = define_region(row = 2, col = 3))
+print(p2[[10]], vp = define_region(row = 3, col = 1))
+print(p2[[32]], vp = define_region(row = 3, col = 2))
+print(p2[[19]], vp = define_region(row = 3, col = 3))
+print(p2[[20]], vp = define_region(row = 4, col = 1:3))
+```
