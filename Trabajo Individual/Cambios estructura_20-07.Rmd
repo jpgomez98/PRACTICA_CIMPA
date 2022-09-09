@@ -9,6 +9,11 @@ output:
 
 ### Paquetes
 
+<<<<<<< Updated upstream
+=======
+Se llaman los paquetes a utilizar.
+
+>>>>>>> Stashed changes
 ```{r}
 library(keras) # for deep learning
 library(tidyverse) # general utility functions
@@ -25,6 +30,10 @@ library(lubridate)
 
 ## Datos
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 ```{r}
 load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
 
@@ -85,17 +94,35 @@ Mes = Mes[1:235]
 model <- keras_model_sequential()
 # our input layer
 model %>% 
+<<<<<<< Updated upstream
   layer_simple_rnn(units = 23, input_shape = c(ncol(X_train)-1,1), activation='tanh', 
+=======
+  layer_simple_rnn(units = 21, input_shape = c(ncol(X_train)-1,1), activation='tanh', 
+>>>>>>> Stashed changes
                    kernel_initializer= initializer_constant(0.5),
                    bias_initializer=initializer_zeros()) %>% 
   layer_dense(units = 18, activation = "relu")%>%
   layer_dense(units = 18, activation = "relu")%>%
+<<<<<<< Updated upstream
   layer_dropout(rate = 0.3)%>%
   layer_dense(units = 12, activation = "relu")%>%
   layer_dropout(rate = 0.3)%>%
   layer_dense(units = 6, activation = "relu")%>%
   layer_dropout(rate = 0.3)%>%
   layer_dense(units = 1, activation = "sigmoid")
+=======
+  layer_dropout(rate = 0.5)%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dense(units = 12, activation = "relu")%>%
+  layer_dropout(rate = 0.4)%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dense(units = 6, activation = "relu")%>%
+  layer_dropout(rate = 0.3)%>%
+  layer_dense(units = 3, activation = "relu")%>%
+  layer_dense(units = 3, activation = "relu")%>%
+  layer_dense(units = 1, activation = "tanh")
+
+>>>>>>> Stashed changes
 ```
 
 
@@ -104,19 +131,32 @@ model %>%
 ```{r}
 
 Cantones = unique(basecanton$Canton)
+<<<<<<< Updated upstream
 Eval.pd = matrix(ncol = 2, nrow = 4)
 Eval.tot = matrix(ncol = 2, nrow = 4)
+=======
+Eval.pd = matrix(ncol = 2, nrow = length(Cantones))
+Eval.tot = matrix(ncol = 2, nrow = length(Cantones))
+>>>>>>> Stashed changes
 p1 = list()
 p2 = list()
 p3 = list()
 df1 = list()
 df2 = list()
 df3 = list()
+<<<<<<< Updated upstream
 Predicciones = matrix(NA, ncol = 2, nrow = 4*3)
 Index = seq(1,3*4, 3)
 
 
 for (i in 1:4) {
+=======
+Predicciones = matrix(NA, ncol = 2, nrow = length(Cantones)*3)
+Index = seq(1,3*length(Cantones), 3)
+
+
+for (i in 1:length(Cantones)) {
+>>>>>>> Stashed changes
   
   
   base = as.data.frame(basecanton %>% filter(Canton == Cantones[i]) %>% dplyr::select(RR))
@@ -142,8 +182,13 @@ for (i in 1:4) {
     x = X_trainc, 
     y = y_trainc, 
     batch_size = 18, 
+<<<<<<< Updated upstream
     epochs = 65, 
     validation_split = 0.2,
+=======
+    epochs = 45, 
+    validation_split = 0.1,
+>>>>>>> Stashed changes
     shuffle = F) 
   
   
@@ -226,6 +271,7 @@ LS = matrix(ncol = 1, nrow = 235)
   
   #Añadir límites a la base df2
   
+<<<<<<< Updated upstream
   # ene <- as.matrix(cbind(df2[[i]][Mes==1,],LI[[1]],LS[[1]]))
   # feb <- as.matrix(cbind(df2[[i]][Mes==2,],LI[[2]],LS[[2]]))
   # mar <- as.matrix(cbind(df2[[i]][Mes==3,],LI[[3]],LS[[3]]))
@@ -240,17 +286,23 @@ LS = matrix(ncol = 1, nrow = 235)
   # dic <- as.matrix(cbind(df2[[i]][Mes==12,],LI[[12]],LS[[12]]))
   
   #df3[[i]] <- as.data.frame(rbind(ene,feb,mar,abr,may,jun,jul,ago,sep,oct,nov,dic))
+=======
+>>>>>>> Stashed changes
 
   df2[[i]] = cbind(df2[[i]], LI, LS)
   df1[[i]] = cbind(df1[[i]], LI[233:235], LS[233:235])
   colnames(df1[[i]]) = c("y_pred","RR","Fecha","Mes","LI","LS")
   
   df3[[i]] = df2[[i]][185:235,]
+<<<<<<< Updated upstream
   #colnames(df2[[i]]) <- c("y_pred","RR","Fecha","Mes","LI","LS")
   #df3[[i]]$y_pred <- as.numeric(df3[[i]]$y_pred)
   #df3[[i]]$RR <- as.numeric(df3[[i]]$RR)
   #df3[[i]]$LI <- as.numeric(df3[[i]]$LI)
   #df3[[i]]$LS <- as.numeric(df3[[i]]$LS)
+=======
+
+>>>>>>> Stashed changes
   
   #Gráficos
     
@@ -297,12 +349,44 @@ LS = matrix(ncol = 1, nrow = 235)
 ## Resultados de métricas
 
 ```{r}
+<<<<<<< Updated upstream
 Metricas = cbind (Eval.pd, Eval.tot)
+=======
+Metricas = cbind (round(Eval.pd,2), round(Eval.tot,2))
+>>>>>>> Stashed changes
 colnames(Metricas) = c("NMRSE 2021", "NIS 2021", "NMRSE Total", "NIS total")
 rownames(Metricas) = Cantones
 as.data.frame(Metricas)
 ```
 
+<<<<<<< Updated upstream
+=======
+## Sobre ajuste
+
+```{r}
+sobreajuste = Metricas[,1]/Metricas[,3]
+
+library(ggplot2)
+
+sobreajuste = cbind(Cantones, sobreajuste)
+sobreajuste = as.data.frame(sobreajuste)
+colnames(sobreajuste) = c("Cantón", "SobreAjuste")
+sobreajuste$SobreAjuste = as.numeric(sobreajuste$SobreAjuste)
+
+
+ggplot(sobreajuste, aes(y = Cantón,x = 1, fill = SobreAjuste)) + 
+  geom_tile() +  scale_fill_stepsn(
+  breaks = c(1.5, 5, 20, 100, 150, 1000),
+  colours = c( "green", "yellow", "orange", "red"),
+  values = NULL,
+  space = "Lab",
+  na.value = "grey50",
+  guide = "legend",
+  aesthetics = "fill")
+
+```
+
+>>>>>>> Stashed changes
 
 ## Gráficos
 
@@ -313,7 +397,15 @@ p3
 ```
 
 
+<<<<<<< Updated upstream
 # Graficos 1
+=======
+## Acomodo resumido de los gráficos
+
+Se acomodan los gráficos con valores ajustados y predichos según los grupos formados por semejanza en el RR.
+
+### Graficos 1
+>>>>>>> Stashed changes
 
 ```{r}
 # creo la "hoja en blanco"
@@ -325,6 +417,7 @@ define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
+<<<<<<< Updated upstream
 print(p2[[1]], vp = define_region(row = 1, col = 1))
 print(p2[[2]], vp = define_region(row = 1, col = 2))
 print(p2[[3]], vp = define_region(row = 1, col = 3))
@@ -334,11 +427,26 @@ print(p2[[6]], vp = define_region(row = 2, col = 3))
 print(p2[[7]], vp = define_region(row = 3, col = 1))
 print(p2[[8]], vp = define_region(row = 3, col = 2))
 print(p2[[9]], vp = define_region(row = 3, col = 3))
+=======
+print(p2[[12]], vp = define_region(row = 1, col = 1))
+print(p2[[4]], vp = define_region(row = 1, col = 2))
+print(p2[[13]], vp = define_region(row = 1, col = 3))
+print(p2[[17]], vp = define_region(row = 2, col = 1))
+print(p2[[5]], vp = define_region(row = 2, col = 2))
+print(p2[[27]], vp = define_region(row = 2, col = 3))
+print(p2[[23]], vp = define_region(row = 3, col = 1))
+print(p2[[8]], vp = define_region(row = 3, col = 2))
+print(p2[[16]], vp = define_region(row = 3, col = 3))
+>>>>>>> Stashed changes
 
 ```
 
 
+<<<<<<< Updated upstream
 # Graficos 2
+=======
+### Graficos 2
+>>>>>>> Stashed changes
 
 ```{r}
 # creo la "hoja en blanco"
@@ -350,6 +458,7 @@ define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
+<<<<<<< Updated upstream
 print(p2[[10]], vp = define_region(row = 1, col = 1))
 print(p2[[11]], vp = define_region(row = 1, col = 2))
 print(p2[[12]], vp = define_region(row = 1, col = 3))
@@ -363,17 +472,37 @@ print(p2[[18]], vp = define_region(row = 3, col = 3))
 
 
 # Graficos 3
+=======
+print(p2[[14]], vp = define_region(row = 1, col = 1))
+print(p2[[15]], vp = define_region(row = 1, col = 2))
+print(p2[[21]], vp = define_region(row = 1, col = 3))
+print(p2[[30]], vp = define_region(row = 2, col = 1))
+print(p2[[22]], vp = define_region(row = 2, col = 2))
+print(p2[[11]], vp = define_region(row = 2, col = 3))
+print(p2[[29]], vp = define_region(row = 3, col = 1))
+print(p2[[28]], vp = define_region(row = 3, col = 2))
+print(p2[[31]], vp = define_region(row = 3, col = 3))
+
+```
+
+### Graficos 3
+>>>>>>> Stashed changes
 
 ```{r}
 # creo la "hoja en blanco"
 grid.newpage()
+<<<<<<< Updated upstream
 pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 3)))
+=======
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 3)))
+>>>>>>> Stashed changes
 
 # una funcion que simplifica el acomodo de los graficos
 define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
+<<<<<<< Updated upstream
 print(p2[[19]], vp = define_region(row = 1, col = 1))
 print(p2[[20]], vp = define_region(row = 1, col = 2))
 print(p2[[21]], vp = define_region(row = 1, col = 3))
@@ -387,17 +516,34 @@ print(p2[[27]], vp = define_region(row = 3, col = 3))
 
 
 # Graficos 4
+=======
+print(p2[[7]], vp = define_region(row = 1, col = 1))
+print(p2[[1]], vp = define_region(row = 1, col = 2))
+print(p2[[25]], vp = define_region(row = 1, col = 3))
+print(p2[[26]], vp = define_region(row = 2, col = 1))
+print(p2[[2]], vp = define_region(row = 2, col = 2))
+print(p2[[3]], vp = define_region(row = 2, col = 3))
+
+```
+
+### Graficos 4
+>>>>>>> Stashed changes
 
 ```{r}
 # creo la "hoja en blanco"
 grid.newpage()
+<<<<<<< Updated upstream
 pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 2)))
+=======
+pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
+>>>>>>> Stashed changes
 
 # una funcion que simplifica el acomodo de los graficos
 define_region <- function(row, col){
   viewport(layout.pos.row = row, layout.pos.col = col)
 }
 
+<<<<<<< Updated upstream
 print(p2[[28]], vp = define_region(row = 1, col = 1:2))
 print(p2[[29]], vp = define_region(row = 2, col = 1))
 print(p2[[30]], vp = define_region(row = 2, col = 2))
@@ -407,3 +553,14 @@ print(p2[[32]], vp = define_region(row = 3, col = 2))
 ```
 
 
+=======
+print(p2[[18]], vp = define_region(row = 1, col = 1:3))
+print(p2[[9]], vp = define_region(row = 2, col = 1))
+print(p2[[24]], vp = define_region(row = 2, col = 2))
+print(p2[[6]], vp = define_region(row = 2, col = 3))
+print(p2[[10]], vp = define_region(row = 3, col = 1))
+print(p2[[32]], vp = define_region(row = 3, col = 2))
+print(p2[[19]], vp = define_region(row = 3, col = 3))
+print(p2[[20]], vp = define_region(row = 4, col = 1:3))
+```
+>>>>>>> Stashed changes
