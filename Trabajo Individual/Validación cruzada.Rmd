@@ -21,6 +21,7 @@ library(neuralnet)
 library(grid)
 library(lubridate)
 library("writexl")
+
 ```
 
 
@@ -107,8 +108,7 @@ Fecha = Fecha[1:235]
 Mes = basecanton$Month
 Mes = Mes[1:235]
 
-val = unique(X_data$Year)
-val = val[c(3,5,7,9,11,13,15,17,19,21)]
+
 ```
 
 
@@ -146,7 +146,9 @@ model %>%
 
 ```{r setup, include=FALSE}
 
-    
+val = unique(X_data$Year)
+val = val[c(3,5,7,9,11,13,15,17,19,21)]
+
 Metricas = matrix(nrow = length(Cantones), ncol = 4)
 
 Index = c(1,4,7,10,13,16,18,20,23,25,28,30)
@@ -334,4 +336,213 @@ Metricas
 save(Metricas, file = "Validación1.Rdata")
 getwd()
 write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación1.xlsx")
+```
+
+
+# Validación tipo 2
+
+## Entrenamiento y predicciones
+
+```{r setup, include=FALSE}
+    
+Metricas = matrix(nrow = length(Cantones), ncol = 4)
+
+Index = c(1,4,7,10,13,16,18,20,23,25,28,30)
+
+val_a = unique(X_data$Year)[c(18,19,20,21)]
+val_a = rep(val_a, each = 4)
+val_a = val_a[-c(14:16)]
+
+val_m = sort(unique(X_data$Month))
+val_indx = rep(c(1,4,7,10), 4)
+val_indx = val_indx[-c(14:16)]
+
+for (i in 1:length(Grupos)) {
+  
+  X_grupo = X_data %>% filter(Canton %in% Grupos[[i]])
+  y_grupo = y_data %>% filter(Canton %in% Grupos[[i]])
+  
+  
+  NRMSE_test = matrix(nrow = length(Grupos[[i]]), ncol = length(val_a))
+  NIS_test = matrix(nrow = length(Grupos[[i]]), ncol = length(val_a))
+      
+  NRMSE_total = matrix(nrow = length(Grupos[[i]]), ncol = length(val_a))
+  NIS_total = matrix(nrow = length(Grupos[[i]]), ncol = length(val_a))
+  
+
+  for (v in 1:length(val_a)) {
+    
+    Xtrain = X_grupo %>% filter(Year < val_a[v])
+    Xtrain = rbind(Xtrain, h=X_grupo %>% filter(Year == val_a[v] & Month < val_m[val_indx[v]]))
+    
+    ytrain = y_grupo %>% filter(Year < val_a[v])
+    ytrain =  rbind(ytrain, y_grupo %>% filter(Year == val_a[v] & Month < val_m[val_indx[v]]))
+    
+    Xtest = X_grupo %>% filter(Year == val_a[v] & Month %in% val_m[val_indx[v]:(val_indx[v]+2)] )
+    ytest = y_grupo %>% filter(Year == val_a[v] & Month %in% val_m[val_indx[v]:(val_indx[v]+2)] )
+    
+    
+    model %>% compile(loss = "mse", 
+                      optimizer = optimizer_adam(lr = 0.0005),
+                      metric = "mean_absolute_error")
+    
+    trained_model <- model %>% fit(
+      x =  as.matrix(Xtrain[,-1]), 
+      y = as.matrix(ytrain[,c("RR")]), 
+      batch_size = 18, 
+      epochs = 30, 
+      validation_split = 0.1,
+      shuffle = F) 
+    
+  
+    for (j in 1:length(Grupos[[i]])) {
+      
+
+      pred = NULL
+      
+      xtr = Xtrain %>% filter(Canton == Grupos[[i]][j])
+      xtr = as.matrix(xtr[,-1])
+      
+      xts = Xtest %>% filter(Canton == Grupos[[i]][j])
+      xts = as.matrix(xts[,-1])
+      
+      base = data.frame(basecanton2 %>% filter(Canton == Grupos[[i]][j]) %>% dplyr::select(RR))
+    
+      yts = as.matrix(denorm((ytest %>% filter(Canton == Grupos[[i]][j]))[,-c(1,2,3)], base))
+        
+      # predicciones a 3 meses
+      for (k in 1:2) {
+        pred[k] = predice(xts)[k]
+        xts[k+1,21] = pred[k]
+      } 
+      pred[3] = predice(xts)[3]
+      
+      
+     
+      # Se crea una base para las predicciones, "df1", que tiene los valores predichos, los valores reales, fecha y mes.
+      df1 = as.data.frame(cbind(pred, 
+                                yts, 
+                                Fecha[(nrow(xtr)+1):(nrow(xtr)+3)],
+                                Mes[(nrow(xtr)+1):(nrow(xtr)+3)]))
+      colnames(df1) = c("y_pred", "RR", "Fecha","Mes")
+      df1$RR = as.numeric(df1$RR)
+      df1$y_pred = as.numeric(df1$y_pred)
+      
+    
+     
+      #### VALORES APROXIMADOS ####
+      ## Generar valores ajustados
+      
+      df2 = as.data.frame(cbind(predice(xtr), 
+                                base$RR[1:nrow(xtr)], 
+                                Fecha[1:nrow(xtr)], 
+                                Mes[1:nrow(xtr)]))
+      colnames(df2) = c("y_pred", "RR", "Fecha","Mes")
+      df2$RR = as.numeric(df2$RR)
+      df2$y_pred = as.numeric(df2$y_pred)
+      df2 = rbind(df2, df1)
+      
+     # everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+      
+      # aqui hago las predicciones del 2000 hasta el 2020 con intervalos de bootstrap
+      
+    LI = matrix(ncol = 1, nrow = nrow(df2))
+    LS = matrix(ncol = 1, nrow = nrow(df2))
+    for (w in 1:12) {
+
+      indx = which(df2$Mes== w)
+      x <- df2[Mes==w,1] # tomo el mes w con las predicciones para cada mes (es decir que tomo el mes w para los años que hayan reportados)
+      x <- as.numeric(na.omit(x))
+      n <- length(x) # voy a hacer un remuestreo para la cantidad de observaciones que tenga de ese mes w
+      Tn <- mean(x) # saco la media para estos datos
+      
+      B <- 100
+      Tboot_b <- NULL
+      for(b in 1:B) {  
+        xb <- sample(x, size = n, replace = TRUE)  
+        Tboot_b[b] <- mean(xb)
+      }
+      # calculo de estadisticos de bootstrap
+      Tboot <- mean(Tboot_b)
+      Vboot <- var(Tboot_b)
+      sdboot <- sqrt(Vboot)
+      
+      # ahora el IC de bootstrap estudentizado
+      B <- 300
+      Tboot_b <- NULL
+      Tboot_bm <- NULL
+      sdboot_b <- NULL
+      
+      for (b in 1:B) {  
+        xb <- sample(x, size = n, replace = TRUE)  
+        Tboot_b[b] <- mean(xb) # la media
+        for (m in 1:B) {    
+          xbm <- sample(xb, size = n, replace = TRUE)    
+          Tboot_bm[m] <- mean(xbm)  
+        }  
+        sdboot_b[b] <- sd(Tboot_bm)
+      }
+      
+      z_star <- (Tboot_b - Tn) / sdboot_b
+      
+      # se crean los limites inferiores y superiores
+      LI[indx,] = x - quantile(z_star, 1 - 0.05 / 2) * sdboot
+      LS[indx,] = x - quantile(z_star, 0.05 / 2) * sdboot
+    }
+    
+      
+      
+      
+      #Añadir límites a la base df2
+      
+    
+      df2 = cbind(df2, LI, LS)
+      df1 = cbind(df1, LI[(nrow(xtr)+1):(nrow(xtr)+3)], 
+                  LS[(nrow(xtr)+1):(nrow(xtr)+3)])
+      colnames(df1) = c("y_pred","RR","Fecha","Mes","LI","LS")
+    
+      
+      NRMSE_test[j,v] = as.numeric(nrmse(df1))
+      
+      NIS_test[j,v] = as.numeric(nis(df1))
+      
+      NRMSE_total[j,v] = as.numeric(nrmse(df2))
+
+      NIS_total[j,v] = as.numeric(nis(df2))
+  
+    }
+    
+   k_clear_session()
+   
+  }
+  
+
+  
+  Metricas[Index[i]:(Index[i]-1+length(Grupos[[i]])),] = cbind( rowMeans((NRMSE_test*is.finite(NRMSE_test)), na.rm=TRUE), 
+rowMeans((NIS_test*is.finite(NIS_test)), na.rm=TRUE), 
+rowMeans((NRMSE_total*is.finite(NRMSE_total)), na.rm=TRUE),
+rowMeans((NIS_total*is.finite(NIS_total)), na.rm=TRUE))
+                                                            
+  
+  
+  
+}
+
+
+
+```
+
+
+
+## Resultados de métricas
+
+```{r}
+colnames(Metricas) = c("NMRSE test", "NIS test", "NMRSE Total", "NIS total")
+rownames(Metricas) = unlist(Grupos)
+Metricas = as.data.frame(Metricas)
+Metricas
+
+save(Metricas, file = "Validación2.Rdata")
+getwd()
+write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación2.xlsx")
 ```
