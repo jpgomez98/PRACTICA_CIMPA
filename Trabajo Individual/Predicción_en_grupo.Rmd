@@ -19,6 +19,7 @@ library(tensorflow)
 library(neuralnet)
 library(grid)
 library(lubridate)
+library("writexl")
 ```
 
 
@@ -282,7 +283,7 @@ for (i in 1:12) {
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
             panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
       labs (x = "Fecha", y = "Riesgo Relativo") + geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
-      ggtitle(paste("Predicciones 2021 del cantón", Cantones[count], sep = " "))
+      ggtitle(paste("Predicciones 2021 del cantón", unlist(Grupos)[count], sep = " "))
     
     
     p2[[count]] = ggplot(df2[[count]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
@@ -292,7 +293,7 @@ for (i in 1:12) {
       scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
       geom_ribbon(data = df1[[count]], aes(ymin = LI,ymax= LS), alpha=0.5, fill = "red") +
       # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
-      ggtitle(paste(Cantones[count]))
+      ggtitle(paste(unlist(Grupos)[count]))
     
     p3[[count]] = ggplot(df3[[count]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
       geom_line(aes(x = Fecha, y = y_pred, colour = "red"))+   
@@ -301,7 +302,7 @@ for (i in 1:12) {
       scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
       geom_ribbon(data = df1[[count]], aes(ymin = LI,ymax= LS), alpha=0.5, fill = "red") +
       # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
-      ggtitle(paste("Últimos 4 años: ", Cantones[count]))
+      ggtitle(paste("Últimos 4 años: ", unlist(Grupos)[count]))
     
   
     
@@ -329,37 +330,15 @@ df1[[1]]
 ## Resultados de métricas
 
 ```{r}
-Metricas = cbind (round(Eval.pd,2), round(Eval.tot,2))
-colnames(Metricas) = c("NMRSE 2021", "NIS 2021", "NMRSE Total", "NIS total")
+Metricas = cbind (unlist(Grupos),round(Eval.pd,2), round(Eval.tot,2))
+colnames(Metricas) = c("Cantón","NMRSE 2021", "NIS 2021", "NMRSE Total", "NIS total")
 rownames(Metricas) = unlist(Grupos)
-as.data.frame(Metricas)
-library(parallel)
-detectCores()
-```
+Metricas = as.data.frame(Metricas)
+Metricas
 
-## Sobre ajuste
-
-```{r}
-sobreajuste = Metricas[,1]/Metricas[,3]
-
-library(ggplot2)
-
-sobreajuste = cbind(Cantones, sobreajuste)
-sobreajuste = as.data.frame(sobreajuste)
-colnames(sobreajuste) = c("Cantón", "SobreAjuste")
-sobreajuste$SobreAjuste = as.numeric(sobreajuste$SobreAjuste)
-
-
-ggplot(sobreajuste, aes(y = Cantón,x = 1, fill = SobreAjuste)) + 
-  geom_tile() +  scale_fill_stepsn(
-  breaks = c(1.5, 5, 20, 100, 150, 1000),
-  colours = c( "green", "yellow", "orange", "red"),
-  values = NULL,
-  space = "Lab",
-  na.value = "grey50",
-  guide = "legend",
-  aesthetics = "fill")
-
+save(Metricas, file = "Metricas_grupal.Rdata")
+getwd()
+write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Metricas_grupal.xlsx")
 ```
 
 
