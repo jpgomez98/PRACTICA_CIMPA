@@ -1,0 +1,139 @@
+---
+title: "Comparación de resultados de Validación"
+author: "Jimena Murillo Montero"
+date: '2022-09-16'
+output: html_document
+---
+
+
+```{r}
+
+#Importar resultados de validación 2018-2021
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/validación2018.Rdata")
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M_trimestre1_2018.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M_trimestre2_2018.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M_trimestre3_2018.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M_trimestre4_2018.Rdata")
+
+#Impoortar resultados de validación 2010-2012
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación2010.Rdata")
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M2_trimestre1_2010.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M2_trimestre2_2010.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M2_trimestre3_2010.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/M2_trimestre4_2010.Rdata")
+```
+
+```{r}
+# M_trimestre1 = M_trimestre1[,2:6]
+# colnames(M_trimestre1) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+# 
+# M_trimestre2 = M_trimestre2[,2:6]
+# colnames(M_trimestre2) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+# 
+# M_trimestre3 = M_trimestre3[,2:6]
+# colnames(M_trimestre3) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+# 
+# M_trimestre4 = M_trimestre4[,2:6]
+# colnames(M_trimestre4) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+# 
+# Metricas = Metricas[,2:6]
+# colnames(Metricas) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+
+
+M2_trimestre1 = M2_trimestre1[,2:6]
+colnames(M2_trimestre1) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+
+M2_trimestre2 = M2_trimestre2[,2:6]
+colnames(M2_trimestre2) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+
+M2_trimestre3 = M2_trimestre3[,2:6]
+colnames(M2_trimestre3) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+
+M2_trimestre4 = M2_trimestre4[,2:6]
+colnames(M2_trimestre4) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+
+Metricas2 = Metricas2[,2:6]
+colnames(Metricas2) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
+```
+# Comparaciones según la métrica
+
+```{r}
+
+
+NRMSE_trimestres = data.frame(M_trimestre1$`NMRSE test`, M_trimestre2$`NMRSE test`, M_trimestre3$`NMRSE test`, M_trimestre4$`NMRSE test`, Metricas$`NMRSE test`)
+NRMSE_trimestres  = data.frame(round(sapply(NRMSE_trimestres , as.numeric),4))
+colnames(NRMSE_trimestres ) = c("1° Trimestre", "2° Trimestre", "3° Trimestre", "4° Trimestre", "Completo")
+rownames(NRMSE_trimestres ) = Metricas$Cantón
+
+boxplot(NRMSE_trimestres )
+
+NRMSE_trimestres 
+
+
+```
+
+```{r}
+
+
+NIS_trimestres = data.frame(M_trimestre1$`NIS test`, M_trimestre2$`NIS test`, M_trimestre3$`NIS test`, M_trimestre4$`NIS test`, Metricas$`NIS test`)
+NIS_trimestres = data.frame(round(sapply(NIS_trimestres , as.numeric),4))
+colnames(NIS_trimestres) = c("1° Trimestre", "2° Trimestre", "3° Trimestre", "4° Trimestre", "Completo")
+rownames(NIS_trimestres) = Metricas$Cantón
+
+boxplot(NIS_trimestres)
+
+NIS_trimestres
+
+
+```
+
+
+
+```{r}
+
+
+NRMSE_test = data.frame(Metricas$`NMRSE test`, Metricas2$NMRSEtest)
+NRMSE_test  = data.frame(round(sapply(NRMSE_test , as.numeric),4))
+colnames(NRMSE_test) = c("Val 2018-2021", "Val 2010-2012")
+rownames(NRMSE_test) = Metricas$Cantón
+
+boxplot(NRMSE_test)
+
+NRMSE_test 
+
+NRMSE_total = data.frame(Metricas$`NMRSE Total`, Metricas2$NMRSEtotal)
+NRMSE_total  = data.frame(round(sapply(NRMSE_total , as.numeric),4))
+colnames(NRMSE_total) = c("Val 2018-2021", "Val 2010-2012")
+rownames(NRMSE_total) = Metricas$Cantón
+
+boxplot(NRMSE_total)
+
+NRMSE_total 
+
+```
+
+```{r}
+
+
+NIS_test = data.frame(Metricas$`NIS test`, Metricas2$NIStest)
+NIS_test  = data.frame(round(sapply(NIS_test , as.numeric),4))
+colnames(NIS_test) = c("Val 2018-2021", "Val 2010-2012")
+rownames(NIS_test) = Metricas$Cantón
+
+boxplot(NIS_test)
+
+NIS_test 
+
+NIS_total = data.frame(Metricas$`NIS total`, Metricas2$NIStotal)
+NIS_total  = data.frame(round(sapply(NIS_total , as.numeric),4))
+colnames(NIS_total) = c("Val 2018-2021", "Val 2010-2012")
+rownames(NIS_total) = Metricas$Cantón
+
+boxplot(NIS_total)
+
+NIS_total 
+
+
+```
