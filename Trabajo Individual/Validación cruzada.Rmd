@@ -148,7 +148,7 @@ model %>%
 
 ## Entrenamiento y predicciones
 
-```{r message=FALSE}
+```{r}
     
 Metricas = matrix(nrow = length(Cantones), ncol = 4)
 M_trimestre1 = matrix(nrow = length(Cantones), ncol = 4)
@@ -369,33 +369,28 @@ rowMeans((NIS_total[,c(4,8,12)]*is.finite(NIS_total[,c(4,8,12)])), na.rm=TRUE))
 
 ```{r}
 Metricas = as.data.frame(cbind(unlist(Grupos),Metricas))
-colnames(Metricas) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(Metricas) = unlist(Grupos)
+colnames(Metricas) = c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 Metricas
 
 save(Metricas, file = "Validación2018.Rdata")
 getwd()
-write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación2.xlsx")
+write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación2018.xlsx")
 
 
 M_trimestre1 = as.data.frame(cbind(unlist(Grupos),M_trimestre1))
-colnames(M_trimestre1) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M_trimestre1) = unlist(Grupos)
+colnames(M_trimestre1) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M_trimestre1
 
 M_trimestre2 = as.data.frame(cbind(unlist(Grupos),M_trimestre2))
-colnames(M_trimestre2) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M_trimestre2) = unlist(Grupos)
+colnames(M_trimestre2) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M_trimestre2
 
 M_trimestre3 = as.data.frame(cbind(unlist(Grupos),M_trimestre3))
-colnames(M_trimestre3) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M_trimestre3) = unlist(Grupos)
+colnames(M_trimestre3) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M_trimestre3
 
 M_trimestre4 = as.data.frame(cbind(unlist(Grupos),M_trimestre4))
-colnames(M_trimestre4) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M_trimestre4) = unlist(Grupos)
+colnames(M_trimestre4) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M_trimestre4
 
 
@@ -409,7 +404,7 @@ save(M_trimestre4, file = "M_trimestre4_2018.Rdata")
 
 ## Entrenamiento y predicciones
 
-```{r setup, include=FALSE}
+```{r}
     
 Metricas2 = matrix(nrow = length(Cantones), ncol = 4)
 M2_trimestre1 = matrix(nrow = length(Cantones), ncol = 4)
@@ -624,8 +619,6 @@ rowMeans((NIS_total[,c(4,8,12)]*is.finite(NIS_total[,c(4,8,12)])), na.rm=TRUE))
   
 }
 
-
-
 ```
 
 
@@ -634,32 +627,26 @@ rowMeans((NIS_total[,c(4,8,12)]*is.finite(NIS_total[,c(4,8,12)])), na.rm=TRUE))
 
 ```{r}
 Metricas2 = as.data.frame(cbind(unlist(Grupos),Metricas2))
-colnames(Metricas2) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(Metricas2) = unlist(Grupos)
+colnames(Metricas2) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 Metricas2
 
 save(Metricas2, file = "Validación2010.Rdata")
-getwd()
 write_xlsx(Metricas2,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Validación2010.xlsx")
 
 M2_trimestre1 = as.data.frame(cbind(unlist(Grupos),M2_trimestre1))
-colnames(M2_trimestre1) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M2_trimestre1) = unlist(Grupos)
+colnames(M2_trimestre1) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M2_trimestre1
 
 M2_trimestre2 = as.data.frame(cbind(unlist(Grupos),M2_trimestre2))
-colnames(M2_trimestre2) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M2_trimestre2) = unlist(Grupos)
+colnames(M2_trimestre2) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M2_trimestre2
 
 M2_trimestre3 = as.data.frame(cbind(unlist(Grupos),M2_trimestre3))
-colnames(M2_trimestre3) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M2_trimestre3) = unlist(Grupos)
+colnames(M2_trimestre3) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M2_trimestre3
 
 M2_trimestre4 = as.data.frame(cbind(unlist(Grupos),M2_trimestre4))
-colnames(M2_trimestre4) = c("Cantón", "NMRSE test", "NIS test", "NMRSE Total", "NIS total")
-rownames(M2_trimestre4) = unlist(Grupos)
+colnames(M2_trimestre4) =  c("Cantón", "NMRSEtest", "NIStest", "NMRSEtotal", "NIStotal")
 M2_trimestre4
 
 save(M2_trimestre1, file = "M2_trimestre1_2010.Rdata")

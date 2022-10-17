@@ -1,0 +1,111 @@
+---
+title: "Comparación de resultados de Validación"
+author: "Jimena Murillo Montero"
+date: '2022-09-16'
+output: html_document
+---
+
+
+```{r}
+
+#Importar resultados de validación 2018-2021
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Val_bloques_9a11.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Val_bloques_12a14.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Val_bloques_15a17.Rdata")
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Val_bloques_18a21.Rdata")
+
+```
+
+```{r}
+library(dplyr)
+#Obtener nombres de cantones en el orden correcto
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+basecanton = basecanton  %>% 
+  
+  dplyr::select(Canton, Year,Month,Nino34SSTA1, Nino34SSTA2, Nino34SSTA3, Nino34SSTA4, Nino34SSTA5, Nino34SSTA6, TNA1,TNA2, NDVI1, NDVI2, LSD1, LSD2, Precip_t1, Precip_t2, Precip_t3, Precip_t4, Precip_t5, Precip_t6, RRl1, RR) %>% 
+  
+  arrange(Canton,Year,Month) %>% ungroup() %>% mutate(Month=as.numeric(Month))
+
+Cantones = unique(basecanton$Canton)
+
+#Clusters
+
+Grupos = list()
+Grupos[[1]] = Cantones[c(1,3,26)]
+Grupos[[2]] = Cantones[c(2,7,25)]
+Grupos[[3]] = Cantones[c(4,12,13)]
+Grupos[[4]] = Cantones[c(5,17,27)]
+Grupos[[5]] = Cantones[c(8,16,23)]
+Grupos[[6]] = Cantones[c(14,15)]
+Grupos[[7]] = Cantones[c(21,30)]
+Grupos[[8]] = Cantones[c(11,22,29)]
+Grupos[[9]] = Cantones[c(28,31)]
+Grupos[[10]] = Cantones[c(9,18,24)]
+Grupos[[11]] = Cantones[c(6,10)]
+Grupos[[12]] = Cantones[c(19,20,32)]
+
+cantones = unlist(Grupos)
+
+res.9_11 = data.frame(cbind(cantones,res.9_11))
+colnames(res.9_11) = c("Cantón", "NRMSEtest", "NIStest", "NRMSEtotal", "NIStotal")
+
+res.12_14 = data.frame(cbind(cantones,res.12_14))
+colnames(res.12_14) = c("Cantón", "NRMSEtest", "NIStest", "NRMSEtotal", "NIStotal")
+
+res.15_17 = data.frame(cbind(cantones,res.15_17))
+colnames(res.15_17) = c("Cantón", "NRMSEtest", "NIStest", "NRMSEtotal", "NIStotal")
+
+res.18_21 = data.frame(cbind(cantones,res.18_21))
+colnames(res.18_21) = c("Cantón", "NRMSEtest", "NIStest", "NRMSEtotal", "NIStotal")
+```
+
+# Comparaciones según la métrica
+
+
+
+```{r}
+
+
+NRMSE_test = data.frame(res.9_11$NRMSEtest, res.12_14$NRMSEtest, res.15_17$NRMSEtest, res.18_21$NRMSEtest)
+NRMSE_test  = data.frame(round(sapply(NRMSE_test, as.numeric),4))
+colnames(NRMSE_test) = c("Val 2009-2011", "Val 2012-2014", "Val 2015-2017", "Val 2018-2021")
+rownames(NRMSE_test) = cantones
+
+boxplot(NRMSE_test)
+
+NRMSE_test 
+
+NRMSE_total = data.frame(res.9_11$NRMSEtotal, res.12_14$NRMSEtotal, res.15_17$NRMSEtotal, res.18_21$NRMSEtotal)
+NRMSE_total  = data.frame(round(sapply(NRMSE_total, as.numeric),4))
+colnames(NRMSE_total) = c("Val 2009-2011", "Val 2012-2014", "Val 2015-2017", "Val 2018-2021")
+rownames(NRMSE_total) = cantones
+
+boxplot(NRMSE_total)
+
+NRMSE_total 
+
+```
+
+```{r}
+
+
+NIS_test = data.frame(res.9_11$NIStest, res.12_14$NIStest, res.15_17$NIStest, res.18_21$NIStest)
+NIS_test  = data.frame(round(sapply(NIS_test, as.numeric),4))
+colnames(NIS_test) = c("Val 2009-2011", "Val 2012-2014", "Val 2015-2017", "Val 2018-2021")
+rownames(NIS_test) = cantones
+
+boxplot(NIS_test)
+
+NIS_test 
+
+NIS_total = data.frame(res.9_11$NIStotal, res.12_14$NIStotal, res.15_17$NIStotal, res.18_21$NIStotal)
+NIS_total  = data.frame(round(sapply(NIS_total, as.numeric),4))
+colnames(NIS_total) = c("Val 2009-2011", "Val 2012-2014", "Val 2015-2017", "Val 2018-2021")
+rownames(NIS_total) = cantones
+
+boxplot(NIS_total)
+
+NIS_total 
+
+```

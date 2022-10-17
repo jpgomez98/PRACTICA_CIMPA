@@ -213,9 +213,10 @@ for (i in 1:12) {
     colnames(df2[[count]]) = c("y_pred", "RR", "Fecha","Mes")
     df2[[count]]$RR = as.numeric(df2[[count]]$RR)
     df2[[count]]$y_pred = as.numeric(df2[[count]]$y_pred)
-    df2[[count]] = rbind(df2[[count]], df1[[count]])
+    df3[[count]] = rbind(df2[[count]], df1[[count]])
+   
     
-    everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%12 == 6]
+    everyother1 <- function(x) x[(seq_along(Fecha) + 5)%%48 == 6]
     
     # aqui hago las predicciones del 2000 hasta el 2020 con intervalos de bootstrap
     
@@ -223,9 +224,9 @@ for (i in 1:12) {
     LS = matrix(ncol = 1, nrow = 235)
     for (w in 1:12) {
       
-      indx = which(df2[[count]]$Mes== w)
-      x <- df2[[count]][Mes==w,1] # tomo el mes w con las predicciones para cada mes (es decir que tomo el mes w para los años que hayan reportados)
-      x <- as.numeric(x)
+      indx = which(df3[[count]]$Mes== w)
+      x <- df3[[count]][Mes==w,1] # tomo el mes w con las predicciones para cada mes (es decir que tomo el mes w para los años que hayan reportados)
+      x <- as.numeric(na.omit(x))
       n <- length(x) # voy a hacer un remuestreo para la cantidad de observaciones que tenga de ese mes w
       Tn <- mean(x) # saco la media para estos datos
       
@@ -259,8 +260,8 @@ for (i in 1:12) {
       z_star <- (Tboot_b - Tn) / sdboot_b
       
       # se crean los limites inferiores y superiores
-      LI[indx,] = as.numeric(df2[[count]][Mes==w,1]) - quantile(z_star, 1 - 0.05 / 2) * sdboot
-      LS[indx,] = as.numeric(df2[[count]][Mes==w,1]) - quantile(z_star, 0.05 / 2) * sdboot
+      LI[indx,] = x - quantile(z_star, 1 - 0.05 / 2) * sdboot
+      LS[indx,] = x - quantile(z_star, 0.05 / 2) * sdboot
     }
     
     
@@ -268,11 +269,11 @@ for (i in 1:12) {
     #Añadir límites a la base df2
     
   
-    df2[[count]] = cbind(df2[[count]], LI, LS)
+    df2[[count]] = cbind(df2[[count]], LI[1:232], LS[1:232])
     df1[[count]] = cbind(df1[[count]], LI[233:235], LS[233:235])
     colnames(df1[[count]]) = c("y_pred","RR","Fecha","Mes","LI","LS")
     
-    df3[[count]] = df2[[count]][185:235,]
+    #df3[[count]] = df2[[count]][185:235,]
   
     
     #Gráficos
@@ -280,31 +281,34 @@ for (i in 1:12) {
     
     p1[[count]] = ggplot(df1[[count]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
       geom_line( aes(x = Fecha, y = y_pred, colour = "red"))+   
-      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-            panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
-      labs (x = "Fecha", y = "Riesgo Relativo") + geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
-      ggtitle(paste("Predicciones 2021 del cantón", unlist(Grupos)[count], sep = " "))
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+            panel.background = element_blank(),
+            panel.border = element_rect(colour = 'black', fill = NA, size = 0.5),
+            plot.title = element_text(hjust = 0.5), legend.position = "none" ) + labs (x = "", y = "") + 
+      geom_ribbon(aes(ymin= LI,ymax= LS), alpha=0.2, fill = "red") +
+      ggtitle(unlist(Grupos)[count])
     
+    for (g in 1:32) {
     
-    p2[[count]] = ggplot(df2[[count]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
+    p2[[g]] = ggplot(df2[[g]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
       geom_line(aes(x = Fecha, y = y_pred, colour = "red"))+   
-      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-            panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
-      scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
-      geom_ribbon(data = df1[[count]], aes(ymin = LI,ymax= LS), alpha=0.5, fill = "red") +
-      # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
-      ggtitle(paste(unlist(Grupos)[count]))
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), plot.title = element_text(hjust = 0.5),
+            panel.background = element_blank(), panel.border = element_rect(fill = NA, colour = 'black', size = 0.5),
+            legend.position = "none" )+
+      scale_x_discrete(breaks = Fecha[c(1,46,106,166,226)]) + labs (x = "", y = "") +
+      geom_ribbon(data = df1[[g]], aes(ymin = LI,ymax= LS), alpha=0.5, fill = "red") +
+      ggtitle(unlist(Grupos)[g])
     
+    }
     p3[[count]] = ggplot(df3[[count]], aes(x = Fecha, y = RR, group = 1)) + geom_line(colour = "blue") + 
       geom_line(aes(x = Fecha, y = y_pred, colour = "red"))+   
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-            panel.background = element_blank(), axis.text.x = element_text(angle = 45), legend.position = "none" )+
-      scale_x_discrete(breaks = everyother1) + labs (x = "Fecha", y = "Riesgo Relativo") +
+            panel.background = element_blank(), panel.border = element_rect(colour = "black", fill = NA, size = 0.5),
+            plot.title = element_text(hjust = 0.5), legend.position = "none" )+
+      scale_x_discrete(breaks = Fecha[c(1,46,106,166,226)]) + labs (x = "", y = "")  +
       geom_ribbon(data = df1[[count]], aes(ymin = LI,ymax= LS), alpha=0.5, fill = "red") +
-      # scale_y_continuous(breaks = seq(min(RR), max(RR), 10)) +
-      ggtitle(paste("Últimos 4 años: ", unlist(Grupos)[count]))
+      ggtitle( unlist(Grupos)[count])
     
-  
     
     
     
@@ -322,127 +326,33 @@ for (i in 1:12) {
 
 ```
 
-```{r}
-df1[[1]]
 
-```
-
-## Resultados de métricas
+## Resultados de métricas 
 
 ```{r}
-Metricas = cbind (unlist(Grupos),round(Eval.pd,2), round(Eval.tot,2))
+Metricas = cbind (unlist(Grupos),round(Eval.pd,3), round(Eval.tot,3))
 colnames(Metricas) = c("Cantón","NMRSE 2021", "NIS 2021", "NMRSE Total", "NIS total")
-rownames(Metricas) = unlist(Grupos)
 Metricas = as.data.frame(Metricas)
 Metricas
 
 save(Metricas, file = "Metricas_grupal.Rdata")
-getwd()
 write_xlsx(Metricas,"C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Metricas_grupal.xlsx")
 ```
 
 
-## Gráficos
+## Acomodo de los gráficos según calidad de predicción
 
 ```{r}
-p1
-p2
-p3
+library(gridExtra)
+library(grid)
+library(data.table)
+
+
+NIS.pred = grid.arrange(p1[[16]], p1[[6]], p1[[26]], p1[[5]], p1[[7]], p1[[18]], p1[[14]], p1[[31]], p1[[32]], ncol = 3, left = "Relative Risk", bottom = "Date")
+
+NIS.todo = grid.arrange(p2[[16]], p2[[6]], p2[[26]], p2[[5]], p2[[7]], p2[[18]], p2[[14]], p2[[31]], p2[[32]], ncol = 3, left = "Relative Risk", bottom = "Date")
+
+ggsave(NIS.pred, filename = "C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/resultados_pred.pdf", width = 15, height = 10)
+ggsave(NIS.todo, filename = "C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/resultados_todo.pdf", width = 15, height = 10)
 ```
 
-
-## Acomodo resumido de los gráficos
-
-Se acomodan los gráficos con valores ajustados y predichos según los grupos formados por semejanza en el RR.
-
-### Graficos 1
-
-```{r}
-# creo la "hoja en blanco"
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 3)))
-
-# una funcion que simplifica el acomodo de los graficos
-define_region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-}
-
-print(p2[[12]], vp = define_region(row = 1, col = 1))
-print(p2[[4]], vp = define_region(row = 1, col = 2))
-print(p2[[13]], vp = define_region(row = 1, col = 3))
-print(p2[[17]], vp = define_region(row = 2, col = 1))
-print(p2[[5]], vp = define_region(row = 2, col = 2))
-print(p2[[27]], vp = define_region(row = 2, col = 3))
-print(p2[[23]], vp = define_region(row = 3, col = 1))
-print(p2[[8]], vp = define_region(row = 3, col = 2))
-print(p2[[16]], vp = define_region(row = 3, col = 3))
-
-```
-
-
-### Graficos 2
-
-```{r}
-# creo la "hoja en blanco"
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 3, ncol = 3)))
-
-# una funcion que simplifica el acomodo de los graficos
-define_region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-}
-
-print(p2[[14]], vp = define_region(row = 1, col = 1))
-print(p2[[15]], vp = define_region(row = 1, col = 2))
-print(p2[[21]], vp = define_region(row = 1, col = 3))
-print(p2[[30]], vp = define_region(row = 2, col = 1))
-print(p2[[22]], vp = define_region(row = 2, col = 2))
-print(p2[[11]], vp = define_region(row = 2, col = 3))
-print(p2[[29]], vp = define_region(row = 3, col = 1))
-print(p2[[28]], vp = define_region(row = 3, col = 2))
-print(p2[[31]], vp = define_region(row = 3, col = 3))
-
-```
-
-### Graficos 3
-
-```{r}
-# creo la "hoja en blanco"
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 3)))
-
-# una funcion que simplifica el acomodo de los graficos
-define_region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-}
-
-print(p2[[7]], vp = define_region(row = 1, col = 1))
-print(p2[[1]], vp = define_region(row = 1, col = 2))
-print(p2[[25]], vp = define_region(row = 1, col = 3))
-print(p2[[26]], vp = define_region(row = 2, col = 1))
-print(p2[[2]], vp = define_region(row = 2, col = 2))
-print(p2[[3]], vp = define_region(row = 2, col = 3))
-
-```
-
-### Graficos 4
-
-```{r}
-# creo la "hoja en blanco"
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
-
-# una funcion que simplifica el acomodo de los graficos
-define_region <- function(row, col){
-  viewport(layout.pos.row = row, layout.pos.col = col)
-}
-
-print(p2[[18]], vp = define_region(row = 1, col = 1:3))
-print(p2[[9]], vp = define_region(row = 2, col = 1))
-print(p2[[24]], vp = define_region(row = 2, col = 2))
-print(p2[[6]], vp = define_region(row = 2, col = 3))
-print(p2[[10]], vp = define_region(row = 3, col = 1))
-print(p2[[32]], vp = define_region(row = 3, col = 2))
-print(p2[[19]], vp = define_region(row = 3, col = 3))
-print(p2[[20]], vp = define_region(row = 4, col = 1:3))
-```

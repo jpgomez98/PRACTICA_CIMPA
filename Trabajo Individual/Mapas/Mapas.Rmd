@@ -1,0 +1,203 @@
+---
+title: "Mapas de comparación"
+author: "Jimena Murillo Montero"
+date: '2022-09-21'
+output: html_document
+---
+
+### Paquetes
+
+```{r}
+library(tidyverse)
+library(timetk)
+library(lubridate)
+library(zoo)
+library(boot)
+library(dlnm)
+library(corrplot)
+# library(INLA)
+library(sf)
+library(data.table)
+library(ggplot2)
+library(readxl)
+
+```
+
+# Representación geográfica de las agrupaciones de cantones
+
+```{r}
+
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+
+
+
+#Archivos para el mapa
+distritos_st <-st_read('./distritos_shape/Distritos_de_Costa_Rica.shp') %>%
+  filter(CODIGO!=60110)
+
+cantones_st <- distritos_st %>%
+  mutate(DTA_C = str_sub(CODIGO,start = 1,end = 3))%>%
+  group_by(DTA_C)%>% summarise() %>%
+  ungroup() %>% mutate(CCanton=as.numeric(DTA_C))
+
+cantones_st
+head(cantones_st)
+
+Cantones <- unique(basecanton$Canton)
+
+G1 = Cantones[c(1,3,26)]
+G2 = Cantones[c(2,7,25)]
+G3 = Cantones[c(4,12,13)]
+G4 = Cantones[c(5,17,27)]
+G5 = Cantones[c(8,16,23)]
+G6 = Cantones[c(14,15)]
+G7 = Cantones[c(21,30)]
+G8 = Cantones[c(11,22,29)]
+G9 = Cantones[c(28,31)]
+G10 = Cantones[c(9,18,24)]
+G11 = Cantones[c(6,10)]
+G12 = Cantones[c(19,20,32)]
+
+
+
+canton_estacional = basecanton %>% dplyr::select(Canton,CCanton) %>% unique()
+canton_estacional <- canton_estacional %>% 
+  mutate(estacion = case_when( canton_estacional$Canton %in% G1 ~ '1',
+                               Canton %in% G2 ~ '2',
+                               Canton %in% G3 ~ '3',
+                               Canton %in% G4 ~ '4',
+                               Canton %in% G5 ~ '5',
+                               Canton %in% G6 ~ '6',
+                               Canton %in% G7 ~ '7',
+                               Canton %in% G8 ~ '8',
+                               Canton %in% G9 ~ '9',
+                               Canton %in% G10 ~ '10',
+                               Canton %in% G11 ~ '11',
+                               Canton %in% G12 ~ '12',
+                               TRUE ~ '13'))
+
+space <- left_join(cantones_st, canton_estacional, by = c("CCanton" = "CCanton"))
+
+
+rojos   = c("#CC433D", "#FF9E99", "#FC554C") #g3, g4, g5
+verdes  = c("#C2FF73", "#A0D15F", "#E3FFBF", "#70BF69") #g6, g7, g8, g9
+azul    = c("#82FDFF", "#6BCFD1") #g1, g2
+morado  = c("#B780FF", "#9669D1", "#E1A8FF") #g10, g11, g12
+gris.na = "#E6DCDC"
+
+mycolor <- c(azul, rojos, verdes, morado, gris.na)
+
+
+
+mapa_grupos <- ggplot(data   = space) +
+  geom_sf(mapping     = aes(fill=as.factor(estacion),geometry=geometry),colour="black",
+          show.legend = F, size=0.1,alpha=0.8)+
+  theme_void()+
+  theme(axis.ticks  = element_blank(),axis.text = element_blank())+
+  scale_fill_manual(values=mycolor,na.value = 'transparent')
+
+
+ggsave(mapa_grupos, 
+       filename = paste0("map.jpg"), 
+       height = 20, width = 20,bg="white")
+
+mapa_grupos
+
+```
+
+# Comparación del NRMSE por cantones: entrenamiento individual vs. entrenamiento grupal
+
+```{r}
+
+
+load("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/base_cantones.RData")
+metricas <- read_excel("C:/Users/usuario1/Desktop/CIMPA/Github_CIMPA/PRACTICA_CIMPA/Trabajo Individual/Resultados_individualvs.grupal.xlsx")
+
+
+#Archivos para el mapa
+distritos_st <-st_read('./distritos_shape/Distritos_de_Costa_Rica.shp') %>%
+  filter(CODIGO!=60110)
+
+
+canton_estacional = basecanton %>% dplyr::select(Canton,CCanton) %>% unique()
+
+
+
+space <- left_join(cantones_st, canton_estacional, by = c("CCanton" = "CCanton"))
+
+  NRMSE_ind = matrix(nrow = 81, ncol = 1)
+  NRMSE_gr = matrix(nrow = 81, ncol = 1)
+  NIS_ind = matrix(nrow = 81, ncol = 1)
+  NIS_gr = matrix(nrow = 81, ncol = 1)
+
+for (i in 1:nrow(space)) {
+
+  a = which(metricas$Cantón == space$Canton[i])
+  
+  if (length(a) > 0) {
+ 
+    NRMSE_ind[i] = as.numeric(metricas$NMRSE_ind[a])
+    NRMSE_gr[i] =  as.numeric(metricas$NMRSE_gr[a])
+    NIS_ind[i] =  as.numeric(metricas$NIS_ind[a])
+    NIS_gr[i] = as.numeric(metricas$NIS_gr[a])
+  } else {
+    NRMSE_ind[i] = NA
+    NRMSE_gr[i] =  NA
+    NIS_ind[i] =  NA
+    NIS_gr[i] = NA
+  }
+}
+
+space <- cbind(space, NRMSE_gr, NRMSE_ind, NIS_gr, NIS_ind)
+
+map.NMRSE1 <- ggplot(data = space) +
+  geom_sf(mapping     = aes(fill=NRMSE_ind,geometry=geometry, color = NA) ,colour="black",size=0.1,alpha=0.8) + 
+  scale_fill_distiller(palette = "Spectral", direction = -1, na.value = 'transparent', 
+                       limits = c(0.5,10), oob = scales::squish, guide_colorbar(title = "NRMSE")) + 
+  theme_void() + theme(axis.ticks = element_blank(),axis.text = element_blank())
+
+
+
+map.NMRSE2 <- ggplot(data = space) +
+  geom_sf(mapping     = aes(fill=NRMSE_gr,geometry=geometry, color = NA) ,colour="black",size=0.1,alpha=0.8) + 
+  scale_fill_distiller(palette = "Spectral", direction = -1, na.value = 'transparent', 
+                       limits = c(0.5,10), oob = scales::squish, guide_colorbar(title = "NRMSE")) + 
+  theme_void() + theme(axis.ticks = element_blank(),axis.text = element_blank())
+
+
+
+map.NIS1 <- ggplot(data = space) +
+  geom_sf(mapping     = aes(fill=NIS_ind,geometry=geometry, color = NA) ,colour="black",size=0.1,alpha=0.8) + 
+  scale_fill_distiller(palette = "Spectral", direction = -1, na.value = 'transparent', 
+                       limits = c(30,100), breaks = c(10,50,100,200), oob = scales::squish, guide_colorbar(title = "NIS")) + 
+  theme_void() + theme(axis.ticks = element_blank(),axis.text = element_blank()) 
+
+
+map.NIS2 <- ggplot(data = space) +
+  geom_sf(mapping     = aes(fill=NIS_gr,geometry=geometry, color = NA) ,colour="black", size = 0.1, alpha = 0.8) + 
+  scale_fill_distiller(palette = "Spectral", direction = -1, na.value = 'transparent', 
+                       limits = c(30,100), breaks = c(10,50,100,200), oob = scales::squish, guide_colorbar(title = "NIS")) +
+  theme_void() + theme(axis.ticks = element_blank(),axis.text = element_blank())
+
+
+
+map.NMRSE1
+map.NMRSE2
+map.NIS1
+map.NIS2
+
+ggsave(map.NMRSE1, 
+       filename = paste0("map.NMRSE1.jpg"), 
+       height = 20, width = 20,bg="white")
+ggsave(map.NMRSE2, 
+       filename = paste0("map.NMRSE2.jpg"), 
+       height = 20, width = 20,bg="white")
+ggsave(map.NIS1, 
+       filename = paste0("map.NIS1.jpg"), 
+       height = 20, width = 20,bg="white")
+ggsave(map.NIS2, 
+       filename = paste0("map.NIS2.jpg"), 
+       height = 20, width = 20,bg="white")
+
+```
